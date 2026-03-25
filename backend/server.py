@@ -93,10 +93,13 @@ class UserBase(BaseModel):
     picture: Optional[str] = None
     role: str = "user"  # user, streamer, vip, modo, admin
     verification_badge: Optional[str] = None  # verified, official, governmental, partner, creator, press
+    account_status: str = "active"  # active, pending_verification, suspended, banned
     bio: Optional[str] = None
     social_links: Dict[str, str] = {}
     is_banned: bool = False
     ban_reason: Optional[str] = None
+    ban_expires_at: Optional[str] = None
+    suspension_reason: Optional[str] = None
     warnings_count: int = 0
     created_at: str
 
@@ -106,6 +109,7 @@ class UserPublic(BaseModel):
     picture: Optional[str] = None
     role: str = "user"
     verification_badge: Optional[str] = None
+    account_status: str = "active"
     bio: Optional[str] = None
     social_links: Dict[str, str] = {}
 
@@ -283,8 +287,15 @@ async def get_current_user(authorization: str = Header(None), request: Request =
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     
-    if user.get("is_banned"):
-        raise HTTPException(status_code=403, detail="User is banned")
+    # Check account status
+    account_status = user.get("account_status", "active")
+    if account_status == "banned" or user.get("is_banned"):
+        ban_reason = user.get("ban_reason", "Violation des règles")
+        raise HTTPException(status_code=403, detail=f"BANNED:{ban_reason}")
+    
+    if account_status == "suspended":
+        suspension_reason = user.get("suspension_reason", "Compte suspendu temporairement")
+        raise HTTPException(status_code=403, detail=f"SUSPENDED:{suspension_reason}")
     
     return user
 
@@ -1093,8 +1104,17 @@ async def get_all_users(
 @api_router.put("/admin/users/{user_id}")
 async def admin_update_user(user_id: str, request: Request, admin: dict = Depends(require_role(["admin"]))):
     body = await request.json()
-    allowed = ["role", "is_banned", "ban_reason", "verification_badge"]
+    allowed = ["role", "is_banned", "ban_reason", "ban_expires_at", "verification_badge", "account_status", "suspension_reason"]
     updates = {k: v for k, v in body.items() if k in allowed}
+    
+    # Sync is_banned with account_status
+    if "account_status" in updates:
+        if updates["account_status"] == "banned":
+            updates["is_banned"] = True
+        elif updates["account_status"] == "active":
+            updates["is_banned"] = False
+            updates["ban_reason"] = None
+            updates["suspension_reason"] = None
     
     if updates:
         await db.users.update_one({"user_id": user_id}, {"$set": updates})
@@ -1111,17 +1131,25 @@ async def admin_update_user(user_id: str, request: Request, admin: dict = Depend
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         
-        # Notify user if banned
-        if updates.get("is_banned"):
+        # Notify user based on status change
+        status = updates.get("account_status")
+        if status == "banned" or updates.get("is_banned"):
+            await create_notification(
+                user_id=user_id,
+                notif_type="system",
+                title="Compte banni",
+                message=f"Votre compte a été banni. Raison: {updates.get('ban_reason', 'Violation des règles')}",
+                link=""
+            )
+        elif status == "suspended":
             await create_notification(
                 user_id=user_id,
                 notif_type="system",
                 title="Compte suspendu",
-                message=f"Votre compte a été suspendu. Raison: {updates.get('ban_reason', 'Non spécifiée')}",
+                message=f"Votre compte a été suspendu temporairement. Raison: {updates.get('suspension_reason', 'Non spécifiée')}",
                 link=""
             )
-        # Notify user if unbanned
-        elif "is_banned" in updates and not updates["is_banned"]:
+        elif status == "active" or ("is_banned" in updates and not updates["is_banned"]):
             await create_notification(
                 user_id=user_id,
                 notif_type="system",
@@ -1314,6 +1342,230 @@ async def get_public_stats():
         "topics_count": topics_count,
         "posts_count": posts_count
     }
+
+# ============ SITE SETTINGS ============
+class SiteSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    maintenance_mode: bool = False
+    maintenance_title: str = "Maintenance en cours"
+    maintenance_message: str = "Le site est temporairement indisponible pour maintenance. Nous serons bientôt de retour !"
+    maintenance_eta: Optional[str] = None  # ISO datetime
+
+class AnnouncementBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    announcement_id: str
+    type: str = "banner"  # banner, popup, toast
+    title: str
+    message: str
+    link: Optional[str] = None
+    link_text: Optional[str] = None
+    style: str = "info"  # info, warning, success, error
+    is_active: bool = True
+    is_dismissible: bool = True
+    show_once: bool = False  # If true, only show once per session
+    priority: int = 0  # Higher = shown first
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
+    target_roles: List[str] = []  # Empty = all users, else specific roles
+    created_at: str
+    updated_at: Optional[str] = None
+
+class AnnouncementCreate(BaseModel):
+    type: str = "banner"
+    title: str
+    message: str
+    link: Optional[str] = None
+    link_text: Optional[str] = None
+    style: str = "info"
+    is_dismissible: bool = True
+    show_once: bool = False
+    priority: int = 0
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
+    target_roles: List[str] = []
+
+# ============ MAINTENANCE MODE ============
+@api_router.get("/settings/maintenance")
+async def get_maintenance_status():
+    """Get current maintenance mode status (public endpoint)"""
+    settings = await db.site_settings.find_one({"key": "maintenance"}, {"_id": 0})
+    if not settings:
+        return {"maintenance_mode": False, "title": "", "message": "", "eta": None}
+    return {
+        "maintenance_mode": settings.get("enabled", False),
+        "title": settings.get("title", "Maintenance en cours"),
+        "message": settings.get("message", "Le site est temporairement indisponible."),
+        "eta": settings.get("eta")
+    }
+
+@api_router.put("/admin/settings/maintenance")
+async def set_maintenance_mode(request: Request, admin: dict = Depends(require_role(["admin"]))):
+    """Toggle maintenance mode"""
+    body = await request.json()
+    
+    await db.site_settings.update_one(
+        {"key": "maintenance"},
+        {"$set": {
+            "key": "maintenance",
+            "enabled": body.get("enabled", False),
+            "title": body.get("title", "Maintenance en cours"),
+            "message": body.get("message", "Le site est temporairement indisponible pour maintenance."),
+            "eta": body.get("eta"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": admin["user_id"]
+        }},
+        upsert=True
+    )
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
+        "action": "toggle_maintenance",
+        "target_type": "settings",
+        "target_id": "maintenance",
+        "details": {"enabled": body.get("enabled", False)},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"message": "Maintenance mode updated", "enabled": body.get("enabled", False)}
+
+# ============ ANNOUNCEMENTS ============
+@api_router.get("/announcements")
+async def get_active_announcements(user: dict = Depends(get_optional_user)):
+    """Get active announcements for the current user"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    query = {
+        "is_active": True,
+        "$or": [
+            {"starts_at": None},
+            {"starts_at": {"$lte": now}}
+        ]
+    }
+    
+    announcements = await db.announcements.find(query, {"_id": 0}).sort("priority", -1).to_list(20)
+    
+    # Filter by end date and target roles
+    filtered = []
+    user_role = user.get("role", "user") if user else "guest"
+    
+    for ann in announcements:
+        # Check end date
+        if ann.get("ends_at") and ann["ends_at"] < now:
+            continue
+        
+        # Check target roles
+        target_roles = ann.get("target_roles", [])
+        if target_roles and user_role not in target_roles and "all" not in target_roles:
+            continue
+        
+        filtered.append(ann)
+    
+    return {"announcements": filtered}
+
+@api_router.get("/admin/announcements")
+async def get_all_announcements(
+    page: int = 1,
+    limit: int = 20,
+    user: dict = Depends(require_role(["admin"]))
+):
+    """Get all announcements (admin only)"""
+    skip = (page - 1) * limit
+    announcements = await db.announcements.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.announcements.count_documents({})
+    return {"announcements": announcements, "total": total, "page": page, "pages": (total + limit - 1) // limit}
+
+@api_router.post("/admin/announcements")
+async def create_announcement(data: AnnouncementCreate, admin: dict = Depends(require_role(["admin"]))):
+    """Create a new announcement"""
+    announcement = AnnouncementBase(
+        announcement_id=f"ann_{uuid.uuid4().hex[:8]}",
+        type=data.type,
+        title=data.title,
+        message=data.message,
+        link=data.link,
+        link_text=data.link_text,
+        style=data.style,
+        is_dismissible=data.is_dismissible,
+        show_once=data.show_once,
+        priority=data.priority,
+        starts_at=data.starts_at,
+        ends_at=data.ends_at,
+        target_roles=data.target_roles,
+        created_at=datetime.now(timezone.utc).isoformat()
+    )
+    
+    await db.announcements.insert_one(announcement.model_dump())
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
+        "action": "create_announcement",
+        "target_type": "announcement",
+        "target_id": announcement.announcement_id,
+        "details": {"title": data.title, "type": data.type},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return announcement
+
+@api_router.put("/admin/announcements/{announcement_id}")
+async def update_announcement(announcement_id: str, request: Request, admin: dict = Depends(require_role(["admin"]))):
+    """Update an announcement"""
+    body = await request.json()
+    allowed = ["type", "title", "message", "link", "link_text", "style", "is_active", 
+               "is_dismissible", "show_once", "priority", "starts_at", "ends_at", "target_roles"]
+    updates = {k: v for k, v in body.items() if k in allowed}
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.announcements.update_one(
+        {"announcement_id": announcement_id},
+        {"$set": updates}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
+        "action": "update_announcement",
+        "target_type": "announcement",
+        "target_id": announcement_id,
+        "details": updates,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    updated = await db.announcements.find_one({"announcement_id": announcement_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: str, admin: dict = Depends(require_role(["admin"]))):
+    """Delete an announcement"""
+    result = await db.announcements.delete_one({"announcement_id": announcement_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
+        "action": "delete_announcement",
+        "target_type": "announcement",
+        "target_id": announcement_id,
+        "details": {},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"message": "Announcement deleted"}
 
 # ============ HEALTH CHECK ============
 @api_router.get("/")

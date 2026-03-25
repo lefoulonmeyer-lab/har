@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Users, MessageSquare, FileText, AlertTriangle, Shield, 
-  TrendingUp, Clock, Ban, Trash2, Edit, ChevronRight, Plus,
-  Eye, EyeOff, Search, Filter, BadgeCheck, Building, Star,
-  Handshake, Newspaper, X, Check, RefreshCw
+  Clock, Ban, Trash2, Edit, Plus, Eye, EyeOff, Search, Filter, 
+  BadgeCheck, Building, Star, Handshake, Newspaper, X, Check, 
+  ChevronDown, ChevronRight, UserX, UserCheck, AlertCircle, Pause,
+  Wrench, Megaphone, Bell, Link, ExternalLink, Calendar, ToggleLeft, ToggleRight,
+  Info, AlertOctagon, CheckCircle, XCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -25,7 +27,7 @@ import axios from 'axios';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Badge options for verification
+// Badge configurations
 const VERIFICATION_BADGES = {
   verified: { label: "Vérifié", color: "#3B82F6", icon: BadgeCheck },
   official: { label: "Officiel", color: "#F59E0B", icon: Shield },
@@ -35,24 +37,158 @@ const VERIFICATION_BADGES = {
   press: { label: "Presse", color: "#6366F1", icon: Newspaper },
 };
 
+// Account status configurations
+const ACCOUNT_STATUSES = {
+  active: { label: "Actif", color: "bg-green-500/20 text-green-400", icon: UserCheck },
+  pending_verification: { label: "En vérification", color: "bg-amber-500/20 text-amber-400", icon: Clock },
+  suspended: { label: "Suspendu", color: "bg-orange-500/20 text-orange-400", icon: Pause },
+  banned: { label: "Banni", color: "bg-red-500/20 text-red-400", icon: Ban },
+};
+
+// Stat Card Component
 const StatCard = ({ icon: Icon, value, label, color, subValue }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="glass-card p-6"
+    className="glass-card p-4 sm:p-6"
   >
     <div className="flex items-start justify-between">
-      <div>
-        <p className="text-muted-foreground text-sm mb-1">{label}</p>
-        <p className="text-3xl font-heading font-bold">{value}</p>
-        {subValue && <p className="text-sm text-muted-foreground mt-1">{subValue}</p>}
+      <div className="min-w-0">
+        <p className="text-muted-foreground text-xs sm:text-sm mb-1 truncate">{label}</p>
+        <p className="text-2xl sm:text-3xl font-heading font-bold">{value}</p>
+        {subValue && <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subValue}</p>}
       </div>
-      <div className={`w-12 h-12 rounded-xl ${color} flex items-center justify-center`}>
-        <Icon className="w-6 h-6 text-white" />
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${color} flex items-center justify-center shrink-0`}>
+        <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
       </div>
     </div>
   </motion.div>
 );
+
+// User Card Component for Mobile
+const UserCard = ({ user, onEdit, onStatusChange, onBadgeChange, onDelete }) => {
+  const [expanded, setExpanded] = useState(false);
+  const statusConfig = ACCOUNT_STATUSES[user.account_status] || ACCOUNT_STATUSES.active;
+  const StatusIcon = statusConfig.icon;
+  
+  return (
+    <div className="glass-card overflow-hidden">
+      {/* Header - Always visible */}
+      <div 
+        className="p-4 flex items-center gap-3 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <Avatar className="w-10 h-10 shrink-0">
+          <AvatarImage src={user.picture} />
+          <AvatarFallback>{user.name?.[0]}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-medium truncate">{user.name}</p>
+            {user.verification_badge && (
+              <VerificationBadge badge={user.verification_badge} />
+            )}
+            <RoleBadge role={user.role} />
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${statusConfig.color}`}>
+              <StatusIcon className="w-3 h-3" />
+              {statusConfig.label}
+            </span>
+          </div>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </div>
+      
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-white/5 pt-4 space-y-4">
+          <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+          
+          {/* Status selector */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Statut du compte</label>
+            <Select 
+              value={user.account_status || 'active'} 
+              onValueChange={(v) => onStatusChange(user.user_id, v)}
+            >
+              <SelectTrigger className="input-dark">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(ACCOUNT_STATUSES).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    <span className="flex items-center gap-2">
+                      <config.icon className="w-4 h-4" />
+                      {config.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Badge selector */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Badge de vérification</label>
+            <Select 
+              value={user.verification_badge || 'none'} 
+              onValueChange={(v) => onBadgeChange(user.user_id, v === 'none' ? null : v)}
+            >
+              <SelectTrigger className="input-dark">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucun badge</SelectItem>
+                {Object.entries(VERIFICATION_BADGES).map(([key, badge]) => (
+                  <SelectItem key={key} value={key}>
+                    <span className="flex items-center gap-2">
+                      <badge.icon className="w-4 h-4" style={{ color: badge.color }} />
+                      {badge.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Role selector */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Rôle</label>
+            <Select 
+              value={user.role} 
+              onValueChange={(v) => onEdit(user.user_id, { role: v })}
+            >
+              <SelectTrigger className="input-dark">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="vip">VIP</SelectItem>
+                <SelectItem value="streamer">Streamer</SelectItem>
+                <SelectItem value="modo">Modérateur</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Actions */}
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 text-red-400 border-red-500/30"
+              onClick={() => onDelete(user.user_id)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Supprimer
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // User Management Component
 const UserManagement = () => {
@@ -62,8 +198,7 @@ const UserManagement = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [statusDialog, setStatusDialog] = useState({ open: false, user: null, status: '', reason: '' });
   
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -97,7 +232,43 @@ const UserManagement = () => {
       await axios.put(`${API}/admin/users/${userId}`, updates, { withCredentials: true });
       toast.success('Utilisateur mis à jour');
       fetchUsers();
-      setEditDialogOpen(false);
+    } catch {
+      toast.error('Erreur');
+    }
+  };
+  
+  const handleStatusChange = (userId, status) => {
+    const user = users.find(u => u.user_id === userId);
+    if (status === 'banned' || status === 'suspended') {
+      setStatusDialog({ 
+        open: true, 
+        user, 
+        status, 
+        reason: '' 
+      });
+    } else {
+      handleUpdateUser(userId, { account_status: status });
+    }
+  };
+  
+  const confirmStatusChange = async () => {
+    const { user, status, reason } = statusDialog;
+    const updates = { account_status: status };
+    if (status === 'banned') {
+      updates.ban_reason = reason || 'Violation des règles';
+      updates.is_banned = true;
+    } else if (status === 'suspended') {
+      updates.suspension_reason = reason || 'Suspension temporaire';
+    }
+    await handleUpdateUser(user.user_id, updates);
+    setStatusDialog({ open: false, user: null, status: '', reason: '' });
+  };
+  
+  const handleBadgeChange = async (userId, badge) => {
+    try {
+      await axios.post(`${API}/admin/users/${userId}/badge`, { badge }, { withCredentials: true });
+      toast.success(badge ? 'Badge attribué' : 'Badge retiré');
+      fetchUsers();
     } catch {
       toast.error('Erreur');
     }
@@ -114,43 +285,35 @@ const UserManagement = () => {
     }
   };
   
-  const handleSetBadge = async (userId, badge) => {
-    try {
-      await axios.post(`${API}/admin/users/${userId}/badge`, { badge }, { withCredentials: true });
-      toast.success(badge ? 'Badge attribué' : 'Badge retiré');
-      fetchUsers();
-    } catch {
-      toast.error('Erreur');
-    }
-  };
-  
   return (
     <div className="space-y-4">
       {/* Search and filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <form onSubmit={handleSearch} className="flex-1 flex gap-2">
+      <div className="flex flex-col gap-3">
+        <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un utilisateur..."
+              placeholder="Rechercher..."
               className="input-dark pl-10"
             />
           </div>
-          <Button type="submit">Rechercher</Button>
+          <Button type="submit" size="icon" className="shrink-0">
+            <Search className="w-4 h-4" />
+          </Button>
         </form>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-40 input-dark">
+        <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
+          <SelectTrigger className="input-dark">
             <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Rôle" />
+            <SelectValue placeholder="Filtrer par rôle" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tous</SelectItem>
+            <SelectItem value="all">Tous les rôles</SelectItem>
             <SelectItem value="user">User</SelectItem>
             <SelectItem value="vip">VIP</SelectItem>
             <SelectItem value="streamer">Streamer</SelectItem>
-            <SelectItem value="modo">Modo</SelectItem>
+            <SelectItem value="modo">Modérateur</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>
@@ -158,89 +321,20 @@ const UserManagement = () => {
       
       {/* Users list */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16" />)}
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {users.map(user => (
-            <div key={user.user_id} className="flex items-center gap-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-              <Avatar className="w-10 h-10">
-                <AvatarImage src={user.picture} />
-                <AvatarFallback>{user.name?.[0]}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium truncate">{user.name}</p>
-                  <RoleBadge role={user.role} />
-                  {user.verification_badge && (
-                    <VerificationBadge badge={user.verification_badge} />
-                  )}
-                  {user.is_banned && (
-                    <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-xs">Banni</span>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-              </div>
-              
-              {/* Badge selector */}
-              <Select 
-                value={user.verification_badge || 'none'} 
-                onValueChange={(v) => handleSetBadge(user.user_id, v === 'none' ? null : v)}
-              >
-                <SelectTrigger className="w-36 input-dark">
-                  <SelectValue placeholder="Badge" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Aucun badge</SelectItem>
-                  {Object.entries(VERIFICATION_BADGES).map(([key, badge]) => (
-                    <SelectItem key={key} value={key}>
-                      <span className="flex items-center gap-2">
-                        <badge.icon className="w-4 h-4" style={{ color: badge.color }} />
-                        {badge.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Role selector */}
-              <Select 
-                value={user.role} 
-                onValueChange={(v) => handleUpdateUser(user.user_id, { role: v })}
-              >
-                <SelectTrigger className="w-28 input-dark">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="vip">VIP</SelectItem>
-                  <SelectItem value="streamer">Streamer</SelectItem>
-                  <SelectItem value="modo">Modo</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {/* Actions */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleUpdateUser(user.user_id, { is_banned: !user.is_banned })}
-                className={user.is_banned ? 'text-green-500 hover:text-green-400' : 'text-amber-500 hover:text-amber-400'}
-                title={user.is_banned ? 'Débannir' : 'Bannir'}
-              >
-                <Ban className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleDeleteUser(user.user_id)}
-                className="text-red-500 hover:text-red-400"
-                title="Supprimer"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
+            <UserCard
+              key={user.user_id}
+              user={user}
+              onEdit={handleUpdateUser}
+              onStatusChange={handleStatusChange}
+              onBadgeChange={handleBadgeChange}
+              onDelete={handleDeleteUser}
+            />
           ))}
         </div>
       )}
@@ -248,15 +342,57 @@ const UserManagement = () => {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-2 pt-4">
-          <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-            Précédent
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+            Préc.
           </Button>
-          <span className="flex items-center px-4 text-sm">Page {page} / {totalPages}</span>
-          <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-            Suivant
+          <span className="flex items-center px-3 text-sm">{page}/{totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+            Suiv.
           </Button>
         </div>
       )}
+      
+      {/* Status change dialog */}
+      <Dialog open={statusDialog.open} onOpenChange={(open) => setStatusDialog({ ...statusDialog, open })}>
+        <DialogContent className="glass-card border-white/10 mx-4 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {statusDialog.status === 'banned' ? (
+                <>
+                  <Ban className="w-5 h-5 text-red-500" />
+                  Bannir {statusDialog.user?.name}
+                </>
+              ) : (
+                <>
+                  <Pause className="w-5 h-5 text-orange-500" />
+                  Suspendre {statusDialog.user?.name}
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">Raison</label>
+            <Textarea
+              value={statusDialog.reason}
+              onChange={(e) => setStatusDialog({ ...statusDialog, reason: e.target.value })}
+              placeholder={statusDialog.status === 'banned' ? 'Raison du bannissement...' : 'Raison de la suspension...'}
+              className="input-dark"
+              rows={3}
+            />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => setStatusDialog({ open: false, user: null, status: '', reason: '' })}>
+              Annuler
+            </Button>
+            <Button 
+              onClick={confirmStatusChange}
+              className={statusDialog.status === 'banned' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}
+            >
+              Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -331,10 +467,10 @@ const CategoryManagement = () => {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="font-heading font-semibold text-lg">Catégories du forum</h3>
-        <Button onClick={() => openEditDialog()} className="btn-primary">
-          <Plus className="w-4 h-4 mr-2" />
-          Nouvelle catégorie
+        <h3 className="font-heading font-semibold">Catégories</h3>
+        <Button onClick={() => openEditDialog()} size="sm" className="btn-primary">
+          <Plus className="w-4 h-4 mr-1" />
+          Nouvelle
         </Button>
       </div>
       
@@ -345,26 +481,28 @@ const CategoryManagement = () => {
       ) : (
         <div className="space-y-2">
           {categories.map(cat => (
-            <div key={cat.category_id} className={`flex items-center gap-4 p-4 rounded-lg transition-colors ${cat.is_visible !== false ? 'bg-white/5 hover:bg-white/10' : 'bg-white/2 opacity-50'}`}>
+            <div key={cat.category_id} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${cat.is_visible !== false ? 'bg-white/5' : 'bg-white/2 opacity-50'}`}>
               <div 
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                 style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
               >
-                <MessageSquare className="w-5 h-5" />
+                <MessageSquare className="w-4 h-4" />
               </div>
-              <div className="flex-1">
-                <p className="font-medium">{cat.name}</p>
-                <p className="text-sm text-muted-foreground">{cat.description}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{cat.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleToggleVisibility(cat)} title={cat.is_visible !== false ? 'Masquer' : 'Afficher'}>
-                {cat.is_visible !== false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => openEditDialog(cat)}>
-                <Edit className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDelete(cat.category_id)}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleVisibility(cat)}>
+                  {cat.is_visible !== false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(cat)}>
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDelete(cat.category_id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -372,9 +510,9 @@ const CategoryManagement = () => {
       
       {/* Edit/Create Dialog */}
       <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog({ ...editDialog, open })}>
-        <DialogContent className="glass-card border-white/10">
+        <DialogContent className="glass-card border-white/10 mx-4 max-w-md">
           <DialogHeader>
-            <DialogTitle>{editDialog.category ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</DialogTitle>
+            <DialogTitle>{editDialog.category ? 'Modifier' : 'Nouvelle catégorie'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
@@ -391,6 +529,7 @@ const CategoryManagement = () => {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="input-dark"
+                rows={2}
               />
             </div>
             <div>
@@ -410,7 +549,7 @@ const CategoryManagement = () => {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="ghost" onClick={() => setEditDialog({ open: false, category: null })}>Annuler</Button>
             <Button onClick={handleSave} className="btn-primary">Sauvegarder</Button>
           </DialogFooter>
@@ -449,6 +588,7 @@ const ReportsManagement = () => {
     try {
       const res = await axios.get(`${API}/reports/${report.report_id}`, { withCredentials: true });
       setSelectedReport(res.data);
+      setResolution({ note: '', action: 'none' });
       setDetailDialog(true);
     } catch {
       toast.error('Erreur');
@@ -463,7 +603,7 @@ const ReportsManagement = () => {
         resolution_note: resolution.note,
         action_taken: resolution.action
       }, { withCredentials: true });
-      toast.success('Signalement mis à jour');
+      toast.success('Signalement traité');
       setDetailDialog(false);
       fetchReports();
     } catch {
@@ -480,172 +620,144 @@ const ReportsManagement = () => {
   
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-heading font-semibold text-lg">Signalements</h3>
-        <div className="flex gap-2">
-          {['pending', 'in_review', 'resolved', 'dismissed'].map(status => (
-            <Button
-              key={status}
-              variant={statusFilter === status ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter(status)}
-              className={statusFilter === status ? 'btn-primary' : ''}
-            >
-              {status === 'pending' && 'En attente'}
-              {status === 'in_review' && 'En cours'}
-              {status === 'resolved' && 'Résolus'}
-              {status === 'dismissed' && 'Classés'}
-            </Button>
-          ))}
-        </div>
+      {/* Status filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {[
+          { value: 'pending', label: 'Attente' },
+          { value: 'in_review', label: 'En cours' },
+          { value: 'resolved', label: 'Résolus' },
+          { value: 'dismissed', label: 'Classés' }
+        ].map(({ value, label }) => (
+          <Button
+            key={value}
+            variant={statusFilter === value ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter(value)}
+            className={`shrink-0 ${statusFilter === value ? 'btn-primary' : ''}`}
+          >
+            {label}
+          </Button>
+        ))}
       </div>
       
       {isLoading ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : reports.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {reports.map(report => (
             <div 
               key={report.report_id} 
-              className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-4 rounded-lg bg-white/5 cursor-pointer active:bg-white/10"
               onClick={() => openDetail(report)}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[report.status]}`}>
                       {report.status}
                     </span>
-                    <span className="text-sm text-muted-foreground">
-                      {report.target_type} • {report.reporter_name}
+                    <span className="text-xs text-muted-foreground">
+                      {report.target_type}
                     </span>
                   </div>
-                  <p className="font-medium">{report.reason}</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {new Date(report.created_at).toLocaleString('fr-FR')}
+                  <p className="font-medium text-sm truncate">{report.reason}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    par {report.reporter_name}
                   </p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-8 text-muted-foreground text-sm">
           Aucun signalement
         </div>
       )}
       
       {/* Detail Dialog */}
       <Dialog open={detailDialog} onOpenChange={setDetailDialog}>
-        <DialogContent className="glass-card border-white/10 max-w-2xl">
+        <DialogContent className="glass-card border-white/10 mx-4 max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Détail du signalement</DialogTitle>
+            <DialogTitle>Signalement</DialogTitle>
           </DialogHeader>
           {selectedReport && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-sm text-muted-foreground">Signalé par</p>
+                  <p className="text-muted-foreground text-xs">Par</p>
                   <p className="font-medium">{selectedReport.report.reporter_name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Type</p>
+                  <p className="text-muted-foreground text-xs">Type</p>
                   <p className="font-medium">{selectedReport.report.target_type}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Raison</p>
-                  <p className="font-medium">{selectedReport.report.reason}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Date</p>
-                  <p className="font-medium">{new Date(selectedReport.report.created_at).toLocaleString('fr-FR')}</p>
                 </div>
               </div>
               
-              {selectedReport.report.details && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Détails</p>
-                  <p className="mt-1 p-3 rounded bg-white/5">{selectedReport.report.details}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Raison</p>
+                <p className="text-sm p-2 rounded bg-white/5">{selectedReport.report.reason}</p>
+              </div>
               
               {selectedReport.target && (
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">Contenu signalé</p>
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <p className="text-muted-foreground text-xs mb-1">Contenu</p>
+                  <div className="p-3 rounded bg-white/5 border border-white/10 text-sm">
                     {selectedReport.report.target_type === 'post' && (
-                      <>
-                        <p className="text-sm text-muted-foreground mb-1">Par {selectedReport.target.author_name}</p>
-                        <p>{selectedReport.target.content}</p>
-                      </>
+                      <p>{selectedReport.target.content?.substring(0, 200)}...</p>
                     )}
                     {selectedReport.report.target_type === 'topic' && (
-                      <>
-                        <p className="font-medium">{selectedReport.target.title}</p>
-                        <p className="text-sm text-muted-foreground mt-1">Par {selectedReport.target.author_name}</p>
-                      </>
+                      <p className="font-medium">{selectedReport.target.title}</p>
                     )}
                     {selectedReport.report.target_type === 'user' && (
-                      <>
-                        <p className="font-medium">{selectedReport.target.name}</p>
-                        <p className="text-sm text-muted-foreground">{selectedReport.target.bio || 'Pas de bio'}</p>
-                      </>
+                      <p>{selectedReport.target.name}</p>
                     )}
                   </div>
                 </div>
               )}
               
-              {selectedReport.report.status === 'pending' || selectedReport.report.status === 'in_review' ? (
+              {(selectedReport.report.status === 'pending' || selectedReport.report.status === 'in_review') && (
                 <>
                   <div>
-                    <p className="text-sm font-medium mb-2">Action à prendre</p>
+                    <p className="text-xs font-medium mb-1">Action</p>
                     <Select value={resolution.action} onValueChange={(v) => setResolution({ ...resolution, action: v })}>
                       <SelectTrigger className="input-dark">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Aucune action</SelectItem>
-                        <SelectItem value="warning">Avertissement</SelectItem>
-                        <SelectItem value="delete">Supprimer le contenu</SelectItem>
-                        <SelectItem value="ban">Bannir l'utilisateur</SelectItem>
+                        <SelectItem value="none">Aucune</SelectItem>
+                        <SelectItem value="warning">Avertir</SelectItem>
+                        <SelectItem value="delete">Supprimer</SelectItem>
+                        <SelectItem value="ban">Bannir</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <p className="text-sm font-medium mb-2">Note de résolution</p>
+                    <p className="text-xs font-medium mb-1">Note</p>
                     <Textarea
                       value={resolution.note}
                       onChange={(e) => setResolution({ ...resolution, note: e.target.value })}
-                      placeholder="Expliquer la décision..."
+                      placeholder="Note de résolution..."
                       className="input-dark"
+                      rows={2}
                     />
                   </div>
                 </>
-              ) : (
-                selectedReport.report.resolution_note && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Résolution</p>
-                    <p className="mt-1 p-3 rounded bg-white/5">{selectedReport.report.resolution_note}</p>
-                  </div>
-                )
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="ghost" onClick={() => setDetailDialog(false)}>Fermer</Button>
             {selectedReport && (selectedReport.report.status === 'pending' || selectedReport.report.status === 'in_review') && (
               <>
-                <Button variant="outline" onClick={() => handleUpdateReport('in_review')}>
-                  En cours d'examen
-                </Button>
-                <Button variant="outline" className="text-gray-400" onClick={() => handleUpdateReport('dismissed')}>
+                <Button variant="outline" size="sm" onClick={() => handleUpdateReport('dismissed')}>
                   Classer
                 </Button>
-                <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateReport('resolved')}>
-                  <Check className="w-4 h-4 mr-2" />
+                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateReport('resolved')}>
+                  <Check className="w-4 h-4 mr-1" />
                   Résoudre
                 </Button>
               </>
@@ -657,7 +769,7 @@ const ReportsManagement = () => {
   );
 };
 
-// Logs Component
+// Admin Logs Component
 const AdminLogs = () => {
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -677,48 +789,525 @@ const AdminLogs = () => {
   }, []);
   
   const actionLabels = {
-    update_user: 'Modification utilisateur',
-    delete_user: 'Suppression utilisateur',
+    update_user: 'Modif. user',
+    delete_user: 'Suppr. user',
     warn_user: 'Avertissement',
     mute_user: 'Mute',
-    set_badge: 'Attribution badge',
-    create_category: 'Création catégorie',
-    update_category: 'Modification catégorie',
-    delete_category: 'Suppression catégorie',
-    delete_topic: 'Suppression discussion',
-    delete_post: 'Suppression message',
-    update_report: 'Traitement signalement'
+    set_badge: 'Badge',
+    create_category: 'Créa. catégorie',
+    update_category: 'Modif. catégorie',
+    delete_category: 'Suppr. catégorie',
+    delete_topic: 'Suppr. topic',
+    delete_post: 'Suppr. post',
+    update_report: 'Signalement',
+    toggle_maintenance: 'Maintenance',
+    create_announcement: 'Créa. annonce',
+    update_announcement: 'Modif. annonce',
+    delete_announcement: 'Suppr. annonce'
+  };
+  
+  return (
+    <div className="space-y-3">
+      {isLoading ? (
+        [...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)
+      ) : logs.length > 0 ? (
+        logs.map(log => (
+          <div key={log.log_id} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 text-sm">
+            <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-violet-400">{log.admin_name}</span>
+                <span className="px-2 py-0.5 rounded bg-white/10 text-xs">
+                  {actionLabels[log.action] || log.action}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {new Date(log.created_at).toLocaleString('fr-FR')}
+              </p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="text-muted-foreground text-center py-8 text-sm">Aucun log</p>
+      )}
+    </div>
+  );
+};
+
+// Maintenance Management Component
+const MaintenanceManagement = () => {
+  const [settings, setSettings] = useState({
+    enabled: false,
+    title: 'Maintenance en cours',
+    message: 'Le site est temporairement indisponible pour maintenance. Nous serons bientôt de retour !',
+    eta: ''
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await axios.get(`${API}/settings/maintenance`, { withCredentials: true });
+        setSettings({
+          enabled: res.data.maintenance_mode,
+          title: res.data.title || 'Maintenance en cours',
+          message: res.data.message || 'Le site est temporairement indisponible pour maintenance.',
+          eta: res.data.eta || ''
+        });
+      } catch (error) {
+        console.error('Error fetching maintenance settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+  
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await axios.put(`${API}/admin/settings/maintenance`, settings, { withCredentials: true });
+      toast.success(settings.enabled ? 'Mode maintenance activé' : 'Mode maintenance désactivé');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const toggleMaintenance = async () => {
+    const newEnabled = !settings.enabled;
+    setSettings({ ...settings, enabled: newEnabled });
+    setIsSaving(true);
+    try {
+      await axios.put(`${API}/admin/settings/maintenance`, { ...settings, enabled: newEnabled }, { withCredentials: true });
+      toast.success(newEnabled ? 'Mode maintenance activé' : 'Mode maintenance désactivé');
+    } catch {
+      toast.error('Erreur');
+      setSettings({ ...settings, enabled: !newEnabled });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  if (isLoading) {
+    return <div className="space-y-4"><Skeleton className="h-20" /><Skeleton className="h-32" /></div>;
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* Toggle Card */}
+      <div className={`p-6 rounded-xl border-2 transition-colors ${settings.enabled ? 'border-amber-500/50 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.enabled ? 'bg-amber-500/20' : 'bg-white/10'}`}>
+              <Wrench className={`w-6 h-6 ${settings.enabled ? 'text-amber-400' : 'text-muted-foreground'}`} />
+            </div>
+            <div>
+              <h3 className="font-heading font-semibold text-lg">Mode Maintenance</h3>
+              <p className="text-sm text-muted-foreground">
+                {settings.enabled ? 'Le site est actuellement en maintenance' : 'Le site est accessible normalement'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleMaintenance}
+            disabled={isSaving}
+            className={`relative w-14 h-8 rounded-full transition-colors ${settings.enabled ? 'bg-amber-500' : 'bg-zinc-700'}`}
+          >
+            <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-lg transition-transform ${settings.enabled ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+      </div>
+      
+      {/* Settings */}
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium mb-2 block">Titre de la page</label>
+          <Input
+            value={settings.title}
+            onChange={(e) => setSettings({ ...settings, title: e.target.value })}
+            placeholder="Maintenance en cours"
+            className="input-dark"
+          />
+        </div>
+        
+        <div>
+          <label className="text-sm font-medium mb-2 block">Message</label>
+          <Textarea
+            value={settings.message}
+            onChange={(e) => setSettings({ ...settings, message: e.target.value })}
+            placeholder="Le site est temporairement indisponible..."
+            className="input-dark"
+            rows={4}
+          />
+        </div>
+        
+        <div>
+          <label className="text-sm font-medium mb-2 block">Heure de fin estimée (optionnel)</label>
+          <Input
+            type="datetime-local"
+            value={settings.eta ? settings.eta.slice(0, 16) : ''}
+            onChange={(e) => setSettings({ ...settings, eta: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+            className="input-dark"
+          />
+        </div>
+        
+        <Button onClick={handleSave} disabled={isSaving} className="btn-primary w-full sm:w-auto">
+          {isSaving ? 'Sauvegarde...' : 'Sauvegarder les paramètres'}
+        </Button>
+      </div>
+      
+      {/* Preview */}
+      {settings.enabled && (
+        <div className="mt-6 p-6 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <h4 className="text-sm font-medium text-amber-400 mb-2">Aperçu de la page maintenance</h4>
+          <div className="bg-[#09090B] rounded-lg p-6 text-center">
+            <Wrench className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+            <h3 className="font-heading text-xl font-bold mb-2">{settings.title}</h3>
+            <p className="text-muted-foreground text-sm">{settings.message}</p>
+            {settings.eta && (
+              <p className="text-sm text-amber-400 mt-4">
+                Retour estimé : {new Date(settings.eta).toLocaleString('fr-FR')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Announcements Management Component
+const AnnouncementsManagement = () => {
+  const [announcements, setAnnouncements] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editDialog, setEditDialog] = useState({ open: false, announcement: null });
+  const [formData, setFormData] = useState({
+    type: 'banner',
+    title: '',
+    message: '',
+    link: '',
+    link_text: '',
+    style: 'info',
+    is_dismissible: true,
+    show_once: false,
+    priority: 0,
+    starts_at: '',
+    ends_at: '',
+    target_roles: []
+  });
+  
+  const styleOptions = [
+    { value: 'info', label: 'Information', icon: Info, color: 'text-blue-400' },
+    { value: 'warning', label: 'Avertissement', icon: AlertTriangle, color: 'text-amber-400' },
+    { value: 'success', label: 'Succès', icon: CheckCircle, color: 'text-green-400' },
+    { value: 'error', label: 'Erreur', icon: XCircle, color: 'text-red-400' }
+  ];
+  
+  const typeOptions = [
+    { value: 'banner', label: 'Bannière' },
+    { value: 'popup', label: 'Popup' },
+    { value: 'toast', label: 'Toast' }
+  ];
+  
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/announcements`, { withCredentials: true });
+      setAnnouncements(res.data.announcements);
+    } catch {
+      toast.error('Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+  
+  const openEditDialog = (ann = null) => {
+    if (ann) {
+      setFormData({
+        type: ann.type || 'banner',
+        title: ann.title || '',
+        message: ann.message || '',
+        link: ann.link || '',
+        link_text: ann.link_text || '',
+        style: ann.style || 'info',
+        is_dismissible: ann.is_dismissible !== false,
+        show_once: ann.show_once || false,
+        priority: ann.priority || 0,
+        starts_at: ann.starts_at ? ann.starts_at.slice(0, 16) : '',
+        ends_at: ann.ends_at ? ann.ends_at.slice(0, 16) : '',
+        target_roles: ann.target_roles || []
+      });
+    } else {
+      setFormData({
+        type: 'banner',
+        title: '',
+        message: '',
+        link: '',
+        link_text: '',
+        style: 'info',
+        is_dismissible: true,
+        show_once: false,
+        priority: 0,
+        starts_at: '',
+        ends_at: '',
+        target_roles: []
+      });
+    }
+    setEditDialog({ open: true, announcement: ann });
+  };
+  
+  const handleSave = async () => {
+    try {
+      const payload = {
+        ...formData,
+        starts_at: formData.starts_at ? new Date(formData.starts_at).toISOString() : null,
+        ends_at: formData.ends_at ? new Date(formData.ends_at).toISOString() : null
+      };
+      
+      if (editDialog.announcement) {
+        await axios.put(`${API}/admin/announcements/${editDialog.announcement.announcement_id}`, payload, { withCredentials: true });
+        toast.success('Annonce mise à jour');
+      } else {
+        await axios.post(`${API}/admin/announcements`, payload, { withCredentials: true });
+        toast.success('Annonce créée');
+      }
+      fetchAnnouncements();
+      setEditDialog({ open: false, announcement: null });
+    } catch {
+      toast.error('Erreur');
+    }
+  };
+  
+  const handleToggleActive = async (ann) => {
+    try {
+      await axios.put(`${API}/admin/announcements/${ann.announcement_id}`, { is_active: !ann.is_active }, { withCredentials: true });
+      fetchAnnouncements();
+    } catch {
+      toast.error('Erreur');
+    }
+  };
+  
+  const handleDelete = async (id) => {
+    if (!window.confirm('Supprimer cette annonce ?')) return;
+    try {
+      await axios.delete(`${API}/admin/announcements/${id}`, { withCredentials: true });
+      toast.success('Annonce supprimée');
+      fetchAnnouncements();
+    } catch {
+      toast.error('Erreur');
+    }
   };
   
   return (
     <div className="space-y-4">
-      <h3 className="font-heading font-semibold text-lg">Historique des actions</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="font-heading font-semibold">Annonces & Popups</h3>
+        <Button onClick={() => openEditDialog()} size="sm" className="btn-primary">
+          <Plus className="w-4 h-4 mr-1" />
+          Nouvelle
+        </Button>
+      </div>
       
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
-      ) : logs.length > 0 ? (
-        <div className="space-y-2">
-          {logs.map(log => (
-            <div key={log.log_id} className="flex items-center gap-4 p-3 rounded-lg bg-white/5 text-sm">
-              <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground w-40 shrink-0">
-                {new Date(log.created_at).toLocaleString('fr-FR')}
-              </span>
-              <span className="font-medium text-violet-400">{log.admin_name}</span>
-              <span className="px-2 py-0.5 rounded bg-white/10 text-xs">
-                {actionLabels[log.action] || log.action}
-              </span>
-              <span className="text-muted-foreground truncate flex-1">
-                {log.target_id}
-              </span>
-            </div>
-          ))}
+      ) : announcements.length > 0 ? (
+        <div className="space-y-3">
+          {announcements.map(ann => {
+            const styleConfig = styleOptions.find(s => s.value === ann.style) || styleOptions[0];
+            const StyleIcon = styleConfig.icon;
+            
+            return (
+              <div key={ann.announcement_id} className={`p-4 rounded-lg border transition-colors ${ann.is_active ? 'bg-white/5 border-white/10' : 'bg-white/2 border-white/5 opacity-50'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ann.is_active ? 'bg-white/10' : 'bg-white/5'}`}>
+                    <StyleIcon className={`w-5 h-5 ${styleConfig.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-medium truncate">{ann.title}</span>
+                      <span className="px-2 py-0.5 rounded text-xs bg-white/10">
+                        {typeOptions.find(t => t.value === ann.type)?.label || ann.type}
+                      </span>
+                      {!ann.is_active && (
+                        <span className="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-400">Inactif</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">{ann.message}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleActive(ann)}>
+                      {ann.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(ann)}>
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDelete(ann.announcement_id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <p className="text-muted-foreground text-center py-8">Aucun log</p>
+        <div className="text-center py-8 text-muted-foreground">
+          <Megaphone className="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Aucune annonce</p>
+        </div>
       )}
+      
+      {/* Edit/Create Dialog */}
+      <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog({ ...editDialog, open })}>
+        <DialogContent className="glass-card border-white/10 mx-4 max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editDialog.announcement ? 'Modifier l\'annonce' : 'Nouvelle annonce'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Type</label>
+                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                  <SelectTrigger className="input-dark">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {typeOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Style</label>
+                <Select value={formData.style} onValueChange={(v) => setFormData({ ...formData, style: v })}>
+                  <SelectTrigger className="input-dark">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {styleOptions.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        <span className="flex items-center gap-2">
+                          <opt.icon className={`w-4 h-4 ${opt.color}`} />
+                          {opt.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Titre</label>
+              <Input
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="Titre de l'annonce"
+                className="input-dark"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Message</label>
+              <Textarea
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                placeholder="Contenu de l'annonce..."
+                className="input-dark"
+                rows={3}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Lien (optionnel)</label>
+                <Input
+                  value={formData.link}
+                  onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                  placeholder="https://..."
+                  className="input-dark"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Texte du lien</label>
+                <Input
+                  value={formData.link_text}
+                  onChange={(e) => setFormData({ ...formData, link_text: e.target.value })}
+                  placeholder="En savoir plus"
+                  className="input-dark"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Début (optionnel)</label>
+                <Input
+                  type="datetime-local"
+                  value={formData.starts_at}
+                  onChange={(e) => setFormData({ ...formData, starts_at: e.target.value })}
+                  className="input-dark"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Fin (optionnel)</label>
+                <Input
+                  type="datetime-local"
+                  value={formData.ends_at}
+                  onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
+                  className="input-dark"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Priorité</label>
+              <Input
+                type="number"
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+                className="input-dark"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Plus la valeur est élevée, plus l'annonce sera affichée en premier</p>
+            </div>
+            
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.is_dismissible}
+                  onChange={(e) => setFormData({ ...formData, is_dismissible: e.target.checked })}
+                  className="rounded border-white/20 bg-white/10"
+                />
+                <span className="text-sm">Peut être fermée</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.show_once}
+                  onChange={(e) => setFormData({ ...formData, show_once: e.target.checked })}
+                  className="rounded border-white/20 bg-white/10"
+                />
+                <span className="text-sm">Afficher une seule fois</span>
+              </label>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => setEditDialog({ open: false, announcement: null })}>Annuler</Button>
+            <Button onClick={handleSave} className="btn-primary">Sauvegarder</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -728,6 +1317,7 @@ export default function AdminDashboard() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('users');
   
   useEffect(() => {
     const fetchStats = async () => {
@@ -748,31 +1338,31 @@ export default function AdminDashboard() {
   
   if (user?.role !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
           <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="font-heading text-2xl font-bold mb-2">Accès refusé</h1>
-          <p className="text-muted-foreground">Vous n'avez pas les permissions nécessaires</p>
+          <h1 className="font-heading text-xl font-bold mb-2">Accès refusé</h1>
+          <p className="text-muted-foreground text-sm">Permissions insuffisantes</p>
         </div>
       </div>
     );
   }
   
   return (
-    <div className="min-h-screen py-8" data-testid="admin-dashboard">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center gap-3 mb-8">
-          <Shield className="w-8 h-8 text-red-500" />
-          <h1 className="font-heading text-3xl font-bold">Administration</h1>
+    <div className="min-h-screen py-4 sm:py-8" data-testid="admin-dashboard">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4">
+        <div className="flex items-center gap-2 mb-6">
+          <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-red-500" />
+          <h1 className="font-heading text-2xl sm:text-3xl font-bold">Admin</h1>
         </div>
         
         {/* Stats */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
           </div>
         ) : stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatCard 
               icon={Users} 
               value={stats.users_count} 
@@ -785,49 +1375,44 @@ export default function AdminDashboard() {
             <StatCard 
               icon={AlertTriangle} 
               value={stats.reports_pending + stats.reports_in_review} 
-              label="Signalements actifs" 
+              label="Signalements" 
               color="bg-amber-600"
-              subValue={`${stats.reports_pending} en attente`}
             />
           </div>
         )}
         
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="glass-card p-1 flex-wrap">
-            <TabsTrigger value="users" className="data-[state=active]:bg-violet-500/20">
-              <Users className="w-4 h-4 mr-2" />
-              Utilisateurs
-            </TabsTrigger>
-            <TabsTrigger value="categories" className="data-[state=active]:bg-violet-500/20">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Catégories
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-violet-500/20">
-              <AlertTriangle className="w-4 h-4 mr-2" />
-              Signalements
-            </TabsTrigger>
-            <TabsTrigger value="logs" className="data-[state=active]:bg-violet-500/20">
-              <Clock className="w-4 h-4 mr-2" />
-              Logs
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="users" className="glass-card p-6">
-            <UserManagement />
-          </TabsContent>
-          
-          <TabsContent value="categories" className="glass-card p-6">
-            <CategoryManagement />
-          </TabsContent>
-          
-          <TabsContent value="reports" className="glass-card p-6">
-            <ReportsManagement />
-          </TabsContent>
-          
-          <TabsContent value="logs" className="glass-card p-6">
-            <AdminLogs />
-          </TabsContent>
-        </Tabs>
+        {/* Tab Navigation - Mobile optimized */}
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
+          {[
+            { id: 'users', icon: Users, label: 'Users' },
+            { id: 'categories', icon: MessageSquare, label: 'Catégories' },
+            { id: 'reports', icon: AlertTriangle, label: 'Signalements' },
+            { id: 'announcements', icon: Megaphone, label: 'Annonces' },
+            { id: 'maintenance', icon: Wrench, label: 'Maintenance' },
+            { id: 'logs', icon: Clock, label: 'Logs' },
+          ].map(tab => (
+            <Button
+              key={tab.id}
+              variant={activeTab === tab.id ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveTab(tab.id)}
+              className={`shrink-0 gap-2 ${activeTab === tab.id ? 'bg-violet-600' : ''}`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </Button>
+          ))}
+        </div>
+        
+        {/* Tab Content */}
+        <div className="glass-card p-4 sm:p-6">
+          {activeTab === 'users' && <UserManagement />}
+          {activeTab === 'categories' && <CategoryManagement />}
+          {activeTab === 'reports' && <ReportsManagement />}
+          {activeTab === 'announcements' && <AnnouncementsManagement />}
+          {activeTab === 'maintenance' && <MaintenanceManagement />}
+          {activeTab === 'logs' && <AdminLogs />}
+        </div>
       </div>
     </div>
   );

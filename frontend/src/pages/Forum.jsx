@@ -17,7 +17,7 @@ import {
 import { Skeleton } from '../components/ui/skeleton';
 import { useAuthStore } from '../store/authStore';
 import { useForumStore } from '../store/forumStore';
-import { RoleBadge } from '../components/Layout';
+import { RoleBadge, VerificationBadge } from '../components/Layout';
 import { toast } from 'sonner';
 
 const icons = {
@@ -123,9 +123,10 @@ const TopicCard = ({ topic, index }) => {
             </h3>
           </div>
           
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1">
               <span className="font-medium text-foreground">{topic.author_name}</span>
+              <VerificationBadge badge={topic.author_badge} />
               <RoleBadge role={topic.author_role} />
             </span>
             {category && (
@@ -182,6 +183,13 @@ const NewTopicDialog = ({ categories, selectedCategory, onCreated }) => {
   const { createTopic } = useForumStore();
   const { isAuthenticated, login } = useAuthStore();
   
+  // Update categoryId when selectedCategory changes
+  React.useEffect(() => {
+    if (selectedCategory) {
+      setCategoryId(selectedCategory);
+    }
+  }, [selectedCategory]);
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !content.trim() || !categoryId) return;
@@ -229,7 +237,7 @@ const NewTopicDialog = ({ categories, selectedCategory, onCreated }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-sm font-medium mb-2 block">Catégorie</label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
+            <Select value={categoryId || undefined} onValueChange={setCategoryId}>
               <SelectTrigger className="input-dark" data-testid="category-select">
                 <SelectValue placeholder="Choisir une catégorie" />
               </SelectTrigger>

@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import { useAuthStore } from './store/authStore';
 import { useForumStore } from './store/forumStore';
 import { Layout } from './components/Layout';
+import { AnnouncementsProvider } from './components/AnnouncementsProvider';
+import axios from 'axios';
 
 // Pages
 import Home from './pages/Home';
@@ -19,6 +21,10 @@ import ModerationPanel from './pages/ModerationPanel';
 import CGU from './pages/CGU';
 import Privacy from './pages/Privacy';
 import Cookies from './pages/Cookies';
+import Blocked from './pages/Blocked';
+import Maintenance from './pages/Maintenance';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // Cookie Banner Component
 const CookieBanner = () => {
@@ -84,9 +90,20 @@ const AuthProvider = ({ children }) => {
   const { checkAuth, isLoading } = useAuthStore();
   const { fetchNotifications } = useForumStore();
   const [initialized, setInitialized] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(null);
   
   useEffect(() => {
     const init = async () => {
+      // Check maintenance mode first
+      try {
+        const maintenanceRes = await axios.get(`${API}/settings/maintenance`);
+        if (maintenanceRes.data.maintenance_mode) {
+          setMaintenanceMode(maintenanceRes.data);
+        }
+      } catch (error) {
+        console.error('Error checking maintenance mode:', error);
+      }
+      
       await checkAuth();
       setInitialized(true);
     };
@@ -107,12 +124,30 @@ const AuthProvider = ({ children }) => {
     );
   }
   
+  // Show maintenance page for non-admin users
+  const user = useAuthStore.getState().user;
+  if (maintenanceMode && user?.role !== 'admin') {
+    return (
+      <Maintenance 
+        title={maintenanceMode.title}
+        message={maintenanceMode.message}
+        eta={maintenanceMode.eta}
+      />
+    );
+  }
+  
   return children;
 };
 
-// App Router with session_id detection
+// App Router with session_id detection and blocked user handling
 const AppRouter = () => {
   const location = useLocation();
+  const { blockedStatus } = useAuthStore();
+  
+  // Show blocked page if user is banned or suspended
+  if (blockedStatus) {
+    return <Blocked type={blockedStatus.type} reason={blockedStatus.reason} />;
+  }
   
   // CRITICAL: Check URL fragment for session_id synchronously during render
   // This prevents race conditions by processing OAuth callback FIRST
@@ -121,24 +156,26 @@ const AppRouter = () => {
   }
   
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/forum" element={<Forum />} />
-        <Route path="/topic/:topicId" element={<TopicDetail />} />
-        <Route path="/profile/:userId" element={<Profile />} />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/my-reports" element={<MyReports />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/moderation" element={<ModerationPanel />} />
-        <Route path="/cgu" element={<CGU />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/cookies" element={<Cookies />} />
-        <Route path="/settings" element={<Profile />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+    <AnnouncementsProvider>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/forum" element={<Forum />} />
+          <Route path="/topic/:topicId" element={<TopicDetail />} />
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/my-reports" element={<MyReports />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/moderation" element={<ModerationPanel />} />
+          <Route path="/cgu" element={<CGU />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/cookies" element={<Cookies />} />
+          <Route path="/settings" element={<Profile />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
+    </AnnouncementsProvider>
   );
 };
 
