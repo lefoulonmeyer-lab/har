@@ -1,0 +1,152 @@
+{
+  "total_tests": 18,
+  "passed_tests": 18,
+  "failed_tests": 0,
+  "success_rate": 100.0,
+  "test_results": [
+    {
+      "test_name": "API Health Check",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 200,
+      "actual_status": 200,
+      "timestamp": "2026-03-25T10:42:54.633748"
+    },
+    {
+      "test_name": "Get Categories",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 200,
+      "actual_status": 200,
+      "timestamp": "2026-03-25T10:42:54.767045"
+    },
+    {
+      "test_name": "Category 'G\u00e9n\u00e9ral' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767659"
+    },
+    {
+      "test_name": "Category 'TikTok' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767674"
+    },
+    {
+      "test_name": "Category 'Twitch' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767679"
+    },
+    {
+      "test_name": "Category 'YouTube' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767682"
+    },
+    {
+      "test_name": "Category 'Setup & Matos' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767686"
+    },
+    {
+      "test_name": "Category 'Events & IRL' exists",
+      "success": true,
+      "details": "",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.767690"
+    },
+    {
+      "test_name": "Get Public Stats",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 200,
+      "actual_status": 200,
+      "timestamp": "2026-03-25T10:42:54.898414"
+    },
+    {
+      "test_name": "Stats field 'users_count' present",
+      "success": true,
+      "details": "Value: 0",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.899061"
+    },
+    {
+      "test_name": "Stats field 'topics_count' present",
+      "success": true,
+      "details": "Value: 0",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.899079"
+    },
+    {
+      "test_name": "Stats field 'posts_count' present",
+      "success": true,
+      "details": "Value: 0",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:54.899084"
+    },
+    {
+      "test_name": "Get Topics",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 200,
+      "actual_status": 200,
+      "timestamp": "2026-03-25T10:42:55.039313"
+    },
+    {
+      "test_name": "Topics response structure valid",
+      "success": true,
+      "details": "Found 0 topics",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:55.039954"
+    },
+    {
+      "test_name": "Search API",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 200,
+      "actual_status": 200,
+      "timestamp": "2026-03-25T10:42:55.165334"
+    },
+    {
+      "test_name": "Auth Me (No Token)",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 401,
+      "actual_status": 401,
+      "timestamp": "2026-03-25T10:42:55.262939"
+    },
+    {
+      "test_name": "Notifications (No Token)",
+      "success": true,
+      "details": "Response received successfully",
+      "expected_status": 401,
+      "actual_status": 401,
+      "timestamp": "2026-03-25T10:42:55.352961"
+    },
+    {
+      "test_name": "CORS Headers Present",
+      "success": true,
+      "details": "Origin: *",
+      "expected_status": null,
+      "actual_status": null,
+      "timestamp": "2026-03-25T10:42:55.417475"
+    }
+  ]
+}
