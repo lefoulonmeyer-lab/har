@@ -1,0 +1,161 @@
+{
+  "identity": {
+    "brand_name": "Astuceson",
+    "mission": "Create the ultimate modern community hub for French-speaking streamers and viewers.",
+    "emotional_tone": "Immersive, Energetic, Exclusive, Connected",
+    "aesthetic": "Dark Mode Gamer, Neon Glassmorphism, Twitch/Discord Hybrid"
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "Plus Jakarta Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl md:text-3xl font-semibold",
+      "h4": "text-xl md:text-2xl font-medium",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed",
+      "caption": "text-sm text-muted-foreground",
+      "tiny": "text-xs font-medium uppercase tracking-wider"
+    },
+    "instructions": "Import 'Outfit' and 'Plus Jakarta Sans' from Google Fonts in index.css. Use Outfit for all Headings and Nav items. Use Plus Jakarta Sans for body text."
+  },
+  "colors": {
+    "background": {
+      "default": "#09090B",
+      "paper": "#121214",
+      "subtle": "#18181B",
+      "glass": "rgba(18, 18, 20, 0.7)"
+    },
+    "primary": {
+      "default": "#7C3AED",
+      "hover": "#6D28D9",
+      "foreground": "#FFFFFF",
+      "glow": "0 0 20px rgba(124, 58, 237, 0.5)"
+    },
+    "secondary": {
+      "default": "#06B6D4",
+      "hover": "#0891B2",
+      "foreground": "#FFFFFF"
+    },
+    "accent": {
+      "live": "#EF4444",
+      "online": "#10B981",
+      "warning": "#F59E0B"
+    },
+    "badges": {
+      "admin": "#EF4444",
+      "modo": "#10B981",
+      "streamer": "#9333EA",
+      "vip": "#EAB308"
+    },
+    "border": {
+      "default": "#27272A",
+      "highlight": "#3F3F46"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "card": "bg-black/40 backdrop-blur-md border border-white/10 shadow-xl",
+      "overlay": "bg-black/60 backdrop-blur-sm",
+      "nav": "bg-[#09090B]/80 backdrop-blur-lg border-b border-white/5"
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at center, rgba(124, 58, 237, 0.15) 0%, transparent 70%)",
+      "button_gradient": "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700",
+      "text_gradient": "bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400"
+    },
+    "shadows": {
+      "neon": "0 0 10px rgba(124, 58, 237, 0.3), 0 0 20px rgba(124, 58, 237, 0.1)",
+      "card": "0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)"
+    },
+    "borders": {
+      "subtle": "1px solid rgba(255, 255, 255, 0.08)",
+      "interactive": "1px solid rgba(124, 58, 237, 0.5)"
+    }
+  },
+  "layout": {
+    "grid_system": "Use 'Bento' grids (CSS Grid) for dashboard and home. Gap-4 to Gap-6.",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "spacing": {
+      "section": "py-16 md:py-24",
+      "element": "space-y-6"
+    },
+    "navigation": "Sidebar on Desktop (collapsible), Bottom Bar or Burger on Mobile. Sticky Header with blur."
+  },
+  "components": {
+    "buttons": {
+      "primary": "rounded-lg font-semibold transition-all duration-300 shadow-neon hover:scale-105 active:scale-95",
+      "ghost": "hover:bg-white/5 hover:text-white transition-colors",
+      "outline": "border border-input hover:bg-accent hover:text-accent-foreground"
+    },
+    "cards": {
+      "default": "rounded-xl border border-white/5 bg-[#121214] overflow-hidden hover:border-violet-500/30 transition-all duration-300",
+      "hover_effect": "hover:-translate-y-1 hover:shadow-lg hover:shadow-violet-500/10"
+    },
+    "inputs": {
+      "style": "bg-[#18181B] border-white/10 focus:border-violet-500 focus:ring-violet-500/20 rounded-md placeholder:text-gray-500"
+    },
+    "badges": {
+      "base": "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide",
+      "glow": "animate-pulse shadow-sm"
+    }
+  },
+  "motion": {
+    "library": "framer-motion",
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -20 },
+      "transition": { "duration": 0.3, "ease": "easeInOut" }
+    },
+    "hover_scale": { "scale": 1.05, "transition": { "type": "spring", "stiffness": 300 } },
+    "list_stagger": {
+      "container": { "hidden": { "opacity": 0 }, "show": { "opacity": 1, "transition": { "staggerChildren": 0.1 } } },
+      "item": { "hidden": { "opacity": 0, "y": 10 }, "show": { "opacity": 1, "y": 0 } }
+    }
+  },
+  "image_urls": {
+    "hero_background": "https://images.unsplash.com/photo-1760999896198-b7e780e42500?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "live_placeholder": "https://images.unsplash.com/photo-1774371337512-f3aba9f57f22?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "community_events": "https://images.unsplash.com/photo-1574768579737-147321626f22?auto=format&fit=crop&q=80",
+    "avatars": [
+      "https://i.pravatar.cc/150?u=1",
+      "https://i.pravatar.cc/150?u=2",
+      "https://i.pravatar.cc/150?u=3",
+      "https://i.pravatar.cc/150?u=4"
+    ],
+    "abstract_shapes": [
+        "https://images.unsplash.com/photo-1758117169154-ba6ffd8f51ad?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "https://images.unsplash.com/photo-1774393920194-3e9fcabb9092?crop=entropy&cs=srgb&fm=jpg&q=85"
+    ]
+  },
+  "universal_guidelines": {
+    "dark_mode_only": "The app is primarily Dark Mode. Do not prioritize light mode styles unless requested.",
+    "interactive_elements": "All interactive elements must have a distinct hover state (color change, glow, or scale).",
+    "accessibility": "Ensure text contrast ratios (4.5:1 minimum). Use lighter grays (e.g., #A1A1AA) for secondary text, never dark gray on black.",
+    "border_radius": "Use 'rounded-xl' for cards and 'rounded-lg' for buttons/inputs to maintain a modern, friendly but techy look.",
+    "spacing_philosophy": "Generous padding inside cards (p-6). Tight gaps in data grids, loose gaps in content lists.",
+    "icons": "Use lucide-react. Stroke width 1.5px or 2px. Size 16px-24px usually.",
+    "testing": "Add data-testid to all interactive elements."
+  },
+  "instructions_to_main_agent": [
+    "Install 'framer-motion' and 'clsx' 'tailwind-merge' if not present.",
+    "Set up Tailwind colors in tailwind.config.js using the specified hex codes.",
+    "Create a 'Layout' component that handles the Sidebar/Header structure.",
+    "Use 'Outfit' font for all headings. Import it via Google Fonts in index.css.",
+    "Implement the 'Glassmorphism' utility classes in index.css or tailwind config.",
+    "Build 'Badge' components for Admin/Modo/Streamer roles using the specified colors.",
+    "Use the provided image URLs for placeholders in the UI."
+  ]
+}
