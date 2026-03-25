@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronLeft, Eye, MessageCircle, Clock, Heart, Reply, Flag,
-  MoreVertical, Pin, Lock, Trash2, Edit, AlertTriangle
+  MoreVertical, Pin, Lock, Trash2, Edit, AlertTriangle, Unlock, Shield
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
@@ -19,6 +19,9 @@ import { useAuthStore } from '../store/authStore';
 import { useForumStore } from '../store/forumStore';
 import { RoleBadge, VerificationBadge } from '../components/Layout';
 import { toast } from 'sonner';
+import axios from 'axios';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const formatDate = (dateStr) => {
   const date = new Date(dateStr);
@@ -31,11 +34,14 @@ const formatDate = (dateStr) => {
   });
 };
 
-const PostCard = ({ post, isAuthor, onReply, onLike, onReport }) => {
+const PostCard = ({ post, isAuthor, onReply, onLike, onReport, onDeletePost }) => {
   const { user, isAuthenticated, login } = useAuthStore();
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const isStaff = user?.role === 'admin' || user?.role === 'modo';
+  const canDelete = isAuthor || isStaff;
   
   const handleSubmitReply = async (e) => {
     e.preventDefault();
@@ -60,28 +66,28 @@ const PostCard = ({ post, isAuthor, onReply, onLike, onReport }) => {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`glass-card p-6 ${post.parent_id ? 'ml-8 border-l-2 border-violet-500/30' : ''}`}
+      className={`glass-card p-4 sm:p-6 ${post.parent_id ? 'ml-4 sm:ml-8 border-l-2 border-violet-500/30' : ''}`}
       data-testid={`post-${post.post_id}`}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="flex items-start justify-between gap-2 sm:gap-4 mb-4">
         <Link 
           to={`/profile/${post.author_id}`}
-          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity min-w-0"
         >
-          <Avatar className="w-10 h-10">
+          <Avatar className="w-8 h-8 sm:w-10 sm:h-10 shrink-0">
             <AvatarImage src={post.author_picture} alt={post.author_name} />
             <AvatarFallback>{post.author_name?.[0]?.toUpperCase()}</AvatarFallback>
           </Avatar>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{post.author_name}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+              <span className="font-medium text-sm sm:text-base truncate">{post.author_name}</span>
               <VerificationBadge badge={post.author_badge} />
               <RoleBadge role={post.author_role} />
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1 sm:gap-2 text-xs text-muted-foreground">
               <Clock className="w-3 h-3" />
-              <span>{formatDate(post.created_at)}</span>
+              <span className="truncate">{formatDate(post.created_at)}</span>
               {post.is_edited && <span className="italic">(modifié)</span>}
             </div>
           </div>
@@ -90,7 +96,7 @@ const PostCard = ({ post, isAuthor, onReply, onLike, onReport }) => {
         {isAuthenticated && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="shrink-0">
+              <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8">
                 <MoreVertical className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -99,6 +105,18 @@ const PostCard = ({ post, isAuthor, onReply, onLike, onReport }) => {
                 <Flag className="w-4 h-4 mr-2" />
                 Signaler
               </DropdownMenuItem>
+              {canDelete && (
+                <>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem 
+                    onClick={() => onDeletePost(post.post_id)}
+                    className="text-red-400"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Supprimer
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -188,6 +206,10 @@ export default function TopicDetail() {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState(null);
   const [reportReason, setReportReason] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  
+  const isStaff = user?.role === 'admin' || user?.role === 'modo';
   
   useEffect(() => {
     fetchTopic(topicId);
@@ -195,6 +217,67 @@ export default function TopicDetail() {
     
     return () => clearCurrentTopic();
   }, [topicId, fetchTopic, fetchPosts, clearCurrentTopic]);
+  
+  // Moderation actions
+  const handlePinTopic = async () => {
+    try {
+      await axios.put(`${API}/admin/topics/${topicId}`, 
+        { is_pinned: !currentTopic.is_pinned },
+        { withCredentials: true }
+      );
+      toast.success(currentTopic.is_pinned ? 'Topic désépinglé' : 'Topic épinglé');
+      fetchTopic(topicId);
+    } catch {
+      toast.error('Erreur lors de la modification');
+    }
+  };
+  
+  const handleLockTopic = async () => {
+    try {
+      await axios.put(`${API}/admin/topics/${topicId}`, 
+        { is_locked: !currentTopic.is_locked },
+        { withCredentials: true }
+      );
+      toast.success(currentTopic.is_locked ? 'Topic déverrouillé' : 'Topic verrouillé');
+      fetchTopic(topicId);
+    } catch {
+      toast.error('Erreur lors de la modification');
+    }
+  };
+  
+  const handleDeleteTopic = async () => {
+    try {
+      await axios.delete(`${API}/admin/topics/${topicId}`, { withCredentials: true });
+      toast.success('Topic supprimé');
+      navigate('/forum');
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    }
+  };
+  
+  const handleDeletePost = async (postId) => {
+    setDeleteTarget({ type: 'post', id: postId });
+    setDeleteDialogOpen(true);
+  };
+  
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    
+    try {
+      if (deleteTarget.type === 'topic') {
+        await handleDeleteTopic();
+      } else {
+        await axios.delete(`${API}/admin/posts/${deleteTarget.id}`, { withCredentials: true });
+        toast.success('Message supprimé');
+        fetchPosts(topicId);
+      }
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    }
+  };
   
   const handleSubmitPost = async (e) => {
     e.preventDefault();
@@ -323,7 +406,7 @@ export default function TopicDetail() {
             {isAuthenticated && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className="shrink-0">
                     <MoreVertical className="w-5 h-5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -335,6 +418,41 @@ export default function TopicDetail() {
                     <Flag className="w-4 h-4 mr-2" />
                     Signaler
                   </DropdownMenuItem>
+                  
+                  {/* Admin/Modo actions */}
+                  {isStaff && (
+                    <>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      <DropdownMenuItem onClick={handlePinTopic} className="text-violet-400">
+                        <Pin className="w-4 h-4 mr-2" />
+                        {currentTopic.is_pinned ? 'Désépingler' : 'Épingler'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleLockTopic} className="text-amber-400">
+                        {currentTopic.is_locked ? (
+                          <>
+                            <Unlock className="w-4 h-4 mr-2" />
+                            Déverrouiller
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4 mr-2" />
+                            Verrouiller
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setDeleteTarget({ type: 'topic', id: topicId });
+                          setDeleteDialogOpen(true);
+                        }}
+                        className="text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Supprimer le topic
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -361,6 +479,7 @@ export default function TopicDetail() {
                 onReply={handleReply}
                 onLike={likePost}
                 onReport={handleReport}
+                onDeletePost={handleDeletePost}
               />
             ))
           ) : (
