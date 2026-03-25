@@ -11,7 +11,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAuthStore } from '../store/authStore';
-import { RoleBadge } from '../components/Layout';
+import { RoleBadge, VerificationBadge } from '../components/Layout';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -158,6 +158,7 @@ export default function Profile() {
                   ) : (
                     <h1 className="font-heading text-2xl md:text-3xl font-bold flex items-center gap-3">
                       {profile.name}
+                      <VerificationBadge badge={profile.verification_badge} showLabel />
                       <RoleBadge role={profile.role} />
                     </h1>
                   )}

@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Home, MessageSquare, User, Settings, LogOut, Menu, X, Bell, Search,
-  Shield, Users, ChevronDown, ExternalLink
+  Shield, Users, ChevronDown, ExternalLink, BadgeCheck, Building, Star,
+  Handshake, Newspaper
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useForumStore } from '../store/forumStore';
@@ -24,6 +25,34 @@ const navItems = [
   { path: '/', icon: Home, label: 'Accueil' },
   { path: '/forum', icon: MessageSquare, label: 'Forum' },
 ];
+
+// Verification badge configurations
+const VERIFICATION_BADGES = {
+  verified: { label: "Vérifié", color: "#3B82F6", icon: BadgeCheck },
+  official: { label: "Officiel", color: "#F59E0B", icon: Shield },
+  governmental: { label: "Gouvernemental", color: "#10B981", icon: Building },
+  partner: { label: "Partenaire", color: "#8B5CF6", icon: Handshake },
+  creator: { label: "Créateur", color: "#EC4899", icon: Star },
+  press: { label: "Presse", color: "#6366F1", icon: Newspaper },
+};
+
+const VerificationBadge = ({ badge, showLabel = false }) => {
+  if (!badge || !VERIFICATION_BADGES[badge]) return null;
+  
+  const config = VERIFICATION_BADGES[badge];
+  const Icon = config.icon;
+  
+  return (
+    <span 
+      className="inline-flex items-center gap-1" 
+      title={config.label}
+      style={{ color: config.color }}
+    >
+      <Icon className="w-4 h-4" />
+      {showLabel && <span className="text-xs font-medium">{config.label}</span>}
+    </span>
+  );
+};
 
 const RoleBadge = ({ role }) => {
   const roleStyles = {
@@ -384,4 +413,4 @@ export const Layout = ({ children }) => {
   );
 };
 
-export { RoleBadge };
+export { RoleBadge, VerificationBadge, VERIFICATION_BADGES };

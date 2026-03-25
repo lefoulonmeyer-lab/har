@@ -12,6 +12,7 @@ import TopicDetail from './pages/TopicDetail';
 import AuthCallback from './pages/AuthCallback';
 import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
+import MyReports from './pages/MyReports';
 import Search from './pages/Search';
 import AdminDashboard from './pages/AdminDashboard';
 import ModerationPanel from './pages/ModerationPanel';
@@ -127,6 +128,7 @@ const AppRouter = () => {
         <Route path="/topic/:topicId" element={<TopicDetail />} />
         <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/notifications" element={<Notifications />} />
+        <Route path="/my-reports" element={<MyReports />} />
         <Route path="/search" element={<Search />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/moderation" element={<ModerationPanel />} />

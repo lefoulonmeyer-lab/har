@@ -28,6 +28,19 @@ APP_NAME = os.environ.get("APP_NAME", "astuceson-forum")
 JWT_SECRET = os.environ.get("JWT_SECRET", "default_secret_key")
 storage_key = None
 
+# Admin emails - these users get admin role automatically
+ADMIN_EMAILS = ["lefoulonmeyer0@gmail.com"]
+
+# Verification badge types
+VERIFICATION_BADGES = {
+    "verified": {"label": "Vérifié", "color": "#3B82F6", "icon": "BadgeCheck"},
+    "official": {"label": "Officiel", "color": "#F59E0B", "icon": "Shield"},
+    "governmental": {"label": "Gouvernemental", "color": "#10B981", "icon": "Building"},
+    "partner": {"label": "Partenaire", "color": "#8B5CF6", "icon": "Handshake"},
+    "creator": {"label": "Créateur", "color": "#EC4899", "icon": "Star"},
+    "press": {"label": "Presse", "color": "#6366F1", "icon": "Newspaper"},
+}
+
 # Create the main app
 app = FastAPI(title="Astuceson Forum API")
 api_router = APIRouter(prefix="/api")
@@ -79,9 +92,12 @@ class UserBase(BaseModel):
     name: str
     picture: Optional[str] = None
     role: str = "user"  # user, streamer, vip, modo, admin
+    verification_badge: Optional[str] = None  # verified, official, governmental, partner, creator, press
     bio: Optional[str] = None
     social_links: Dict[str, str] = {}
     is_banned: bool = False
+    ban_reason: Optional[str] = None
+    warnings_count: int = 0
     created_at: str
 
 class UserPublic(BaseModel):
@@ -89,6 +105,7 @@ class UserPublic(BaseModel):
     name: str
     picture: Optional[str] = None
     role: str = "user"
+    verification_badge: Optional[str] = None
     bio: Optional[str] = None
     social_links: Dict[str, str] = {}
 
@@ -100,6 +117,7 @@ class CategoryBase(BaseModel):
     icon: str = "MessageSquare"
     color: str = "#7C3AED"
     order: int = 0
+    is_visible: bool = True
     created_at: str
 
 class CategoryCreate(BaseModel):
@@ -118,6 +136,7 @@ class TopicBase(BaseModel):
     author_name: str
     author_picture: Optional[str] = None
     author_role: str = "user"
+    author_badge: Optional[str] = None
     is_pinned: bool = False
     is_locked: bool = False
     views: int = 0
@@ -140,6 +159,7 @@ class PostBase(BaseModel):
     author_name: str
     author_picture: Optional[str] = None
     author_role: str = "user"
+    author_badge: Optional[str] = None
     parent_id: Optional[str] = None
     likes: List[str] = []
     like_count: int = 0
@@ -156,9 +176,11 @@ class NotificationBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     notification_id: str
     user_id: str
-    type: str  # reply, mention, like
+    type: str  # reply, mention, like, warning, report_update, system
+    title: str
     message: str
     link: str
+    data: Dict[str, Any] = {}
     is_read: bool = False
     created_at: str
 
@@ -173,6 +195,7 @@ class AlertBase(BaseModel):
     from_user_name: str
     status: str = "pending"  # pending, handled
     handled_by: Optional[str] = None
+    handled_at: Optional[str] = None
     created_at: str
 
 class ReportBase(BaseModel):
@@ -183,14 +206,51 @@ class ReportBase(BaseModel):
     target_type: str  # post, topic, user
     target_id: str
     reason: str
-    status: str = "pending"  # pending, reviewed, dismissed
+    details: Optional[str] = None
+    status: str = "pending"  # pending, in_review, resolved, dismissed
+    priority: str = "normal"  # low, normal, high, urgent
     reviewed_by: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    resolution_note: Optional[str] = None
+    action_taken: Optional[str] = None  # none, warning, delete, ban
     created_at: str
+    updated_at: Optional[str] = None
 
 class ReportCreate(BaseModel):
     target_type: str
     target_id: str
     reason: str
+    details: Optional[str] = None
+
+class ReportUpdate(BaseModel):
+    status: str
+    resolution_note: Optional[str] = None
+    action_taken: Optional[str] = None
+    priority: Optional[str] = None
+
+# ============ HELPER: CREATE NOTIFICATION ============
+async def create_notification(
+    user_id: str,
+    notif_type: str,
+    title: str,
+    message: str,
+    link: str = "",
+    data: dict = None
+):
+    """Create a notification for a user"""
+    notif = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:8]}",
+        "user_id": user_id,
+        "type": notif_type,
+        "title": title,
+        "message": message,
+        "link": link,
+        "data": data or {},
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notif)
+    return notif
 
 # ============ AUTH HELPERS ============
 async def get_current_user(authorization: str = Header(None), request: Request = None) -> dict:
@@ -269,9 +329,6 @@ async def exchange_session(request: Request):
     picture = auth_data.get("picture")
     session_token = auth_data.get("session_token")
     
-    # Admin emails - these users get admin role automatically
-    ADMIN_EMAILS = ["lefoulonmeyer0@gmail.com"]
-    
     # Find or create user
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     
@@ -295,9 +352,12 @@ async def exchange_session(request: Request):
             "name": name,
             "picture": picture,
             "role": role,
+            "verification_badge": None,
             "bio": None,
             "social_links": {},
             "is_banned": False,
+            "ban_reason": None,
+            "warnings_count": 0,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
@@ -341,12 +401,12 @@ async def logout(request: Request, user: dict = Depends(get_current_user)):
     return response
 
 # ============ USER ROUTES ============
-@api_router.get("/users/{user_id}", response_model=UserPublic)
+@api_router.get("/users/{user_id}")
 async def get_user(user_id: str):
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return UserPublic(**user)
+    return user
 
 @api_router.put("/users/me")
 async def update_me(request: Request, user: dict = Depends(get_current_user)):
@@ -360,9 +420,61 @@ async def update_me(request: Request, user: dict = Depends(get_current_user)):
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return updated
 
+# ============ VERIFICATION BADGES ============
+@api_router.get("/verification-badges")
+async def get_verification_badges():
+    """Get all available verification badge types"""
+    return VERIFICATION_BADGES
+
+@api_router.post("/admin/users/{user_id}/badge")
+async def set_user_badge(user_id: str, request: Request, admin: dict = Depends(require_role(["admin"]))):
+    """Set or remove a user's verification badge"""
+    body = await request.json()
+    badge = body.get("badge")  # None to remove
+    
+    if badge and badge not in VERIFICATION_BADGES:
+        raise HTTPException(status_code=400, detail="Invalid badge type")
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"verification_badge": badge}}
+    )
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
+        "action": "set_badge",
+        "target_type": "user",
+        "target_id": user_id,
+        "details": {"badge": badge},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Notify user
+    if badge:
+        badge_info = VERIFICATION_BADGES[badge]
+        await create_notification(
+            user_id=user_id,
+            notif_type="system",
+            title="Badge de vérification",
+            message=f"Félicitations ! Vous avez reçu le badge {badge_info['label']}.",
+            data={"badge": badge}
+        )
+    
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return user
+
 # ============ CATEGORY ROUTES ============
 @api_router.get("/categories", response_model=List[CategoryBase])
 async def get_categories():
+    categories = await db.categories.find({"is_visible": {"$ne": False}}, {"_id": 0}).sort("order", 1).to_list(100)
+    return categories
+
+@api_router.get("/admin/categories")
+async def get_all_categories(user: dict = Depends(require_role(["admin"]))):
+    """Get all categories including hidden ones (admin only)"""
     categories = await db.categories.find({}, {"_id": 0}).sort("order", 1).to_list(100)
     return categories
 
@@ -377,16 +489,41 @@ async def create_category(data: CategoryCreate, user: dict = Depends(require_rol
         created_at=datetime.now(timezone.utc).isoformat()
     )
     await db.categories.insert_one(cat.model_dump())
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": user["user_id"],
+        "admin_name": user["name"],
+        "action": "create_category",
+        "target_type": "category",
+        "target_id": cat.category_id,
+        "details": {"name": data.name},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
     return cat
 
 @api_router.put("/categories/{category_id}")
 async def update_category(category_id: str, request: Request, user: dict = Depends(require_role(["admin"]))):
     body = await request.json()
-    allowed = ["name", "description", "icon", "color", "order"]
+    allowed = ["name", "description", "icon", "color", "order", "is_visible"]
     updates = {k: v for k, v in body.items() if k in allowed}
     
     if updates:
         await db.categories.update_one({"category_id": category_id}, {"$set": updates})
+        
+        # Log action
+        await db.admin_logs.insert_one({
+            "log_id": f"log_{uuid.uuid4().hex[:8]}",
+            "admin_id": user["user_id"],
+            "admin_name": user["name"],
+            "action": "update_category",
+            "target_type": "category",
+            "target_id": category_id,
+            "details": updates,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
     
     updated = await db.categories.find_one({"category_id": category_id}, {"_id": 0})
     if not updated:
@@ -395,9 +532,24 @@ async def update_category(category_id: str, request: Request, user: dict = Depen
 
 @api_router.delete("/categories/{category_id}")
 async def delete_category(category_id: str, user: dict = Depends(require_role(["admin"]))):
-    result = await db.categories.delete_one({"category_id": category_id})
-    if result.deleted_count == 0:
+    cat = await db.categories.find_one({"category_id": category_id}, {"_id": 0})
+    if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    
+    result = await db.categories.delete_one({"category_id": category_id})
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": user["user_id"],
+        "admin_name": user["name"],
+        "action": "delete_category",
+        "target_type": "category",
+        "target_id": category_id,
+        "details": {"name": cat.get("name")},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"message": "Category deleted"}
 
 # ============ TOPIC ROUTES ============
@@ -445,6 +597,7 @@ async def create_topic(data: TopicCreate, user: dict = Depends(get_current_user)
         author_name=user["name"],
         author_picture=user.get("picture"),
         author_role=user.get("role", "user"),
+        author_badge=user.get("verification_badge"),
         created_at=datetime.now(timezone.utc).isoformat()
     )
     await db.topics.insert_one(topic.model_dump())
@@ -487,6 +640,20 @@ async def delete_topic(topic_id: str, user: dict = Depends(get_current_user)):
     
     await db.topics.delete_one({"topic_id": topic_id})
     await db.posts.delete_many({"topic_id": topic_id})
+    
+    # Log if admin/modo action
+    if user.get("role") in ["admin", "modo"] and topic["author_id"] != user["user_id"]:
+        await db.admin_logs.insert_one({
+            "log_id": f"log_{uuid.uuid4().hex[:8]}",
+            "admin_id": user["user_id"],
+            "admin_name": user["name"],
+            "action": "delete_topic",
+            "target_type": "topic",
+            "target_id": topic_id,
+            "details": {"title": topic.get("title"), "author": topic.get("author_name")},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    
     return {"message": "Topic deleted"}
 
 # ============ POST ROUTES ============
@@ -515,6 +682,7 @@ async def create_post(data: PostCreate, user: dict = Depends(get_current_user)):
         author_name=user["name"],
         author_picture=user.get("picture"),
         author_role=user.get("role", "user"),
+        author_badge=user.get("verification_badge"),
         parent_id=data.parent_id,
         created_at=datetime.now(timezone.utc).isoformat()
     )
@@ -534,16 +702,14 @@ async def create_post(data: PostCreate, user: dict = Depends(get_current_user)):
     
     # Notify topic author
     if topic["author_id"] != user["user_id"]:
-        notif = {
-            "notification_id": f"notif_{uuid.uuid4().hex[:8]}",
-            "user_id": topic["author_id"],
-            "type": "reply",
-            "message": f"{user['name']} a répondu à votre sujet",
-            "link": f"/topic/{data.topic_id}",
-            "is_read": False,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.notifications.insert_one(notif)
+        await create_notification(
+            user_id=topic["author_id"],
+            notif_type="reply",
+            title="Nouvelle réponse",
+            message=f"{user['name']} a répondu à votre sujet « {topic['title'][:50]} »",
+            link=f"/topic/{data.topic_id}",
+            data={"topic_id": data.topic_id, "post_id": post.post_id}
+        )
     
     # Check for mentions
     await process_mentions(data.content, data.topic_id, post.post_id, user)
@@ -577,6 +743,20 @@ async def delete_post(post_id: str, user: dict = Depends(get_current_user)):
     
     await db.posts.delete_one({"post_id": post_id})
     await db.topics.update_one({"topic_id": post["topic_id"]}, {"$inc": {"reply_count": -1}})
+    
+    # Log if admin/modo action
+    if user.get("role") in ["admin", "modo"] and post["author_id"] != user["user_id"]:
+        await db.admin_logs.insert_one({
+            "log_id": f"log_{uuid.uuid4().hex[:8]}",
+            "admin_id": user["user_id"],
+            "admin_name": user["name"],
+            "action": "delete_post",
+            "target_type": "post",
+            "target_id": post_id,
+            "details": {"author": post.get("author_name"), "topic_id": post.get("topic_id")},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    
     return {"message": "Post deleted"}
 
 @api_router.post("/posts/{post_id}/like")
@@ -594,16 +774,14 @@ async def like_post(post_id: str, user: dict = Depends(get_current_user)):
         action = "liked"
         # Notify post author
         if post["author_id"] != user["user_id"]:
-            notif = {
-                "notification_id": f"notif_{uuid.uuid4().hex[:8]}",
-                "user_id": post["author_id"],
-                "type": "like",
-                "message": f"{user['name']} a aimé votre message",
-                "link": f"/topic/{post['topic_id']}",
-                "is_read": False,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.notifications.insert_one(notif)
+            await create_notification(
+                user_id=post["author_id"],
+                notif_type="like",
+                title="Nouveau like",
+                message=f"{user['name']} a aimé votre message",
+                link=f"/topic/{post['topic_id']}",
+                data={"post_id": post_id}
+            )
     
     await db.posts.update_one({"post_id": post_id}, {"$set": {"likes": likes, "like_count": len(likes)}})
     return {"action": action, "like_count": len(likes)}
@@ -627,6 +805,18 @@ async def process_mentions(content: str, topic_id: str, post_id: Optional[str], 
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.alerts.insert_one(alert)
+        
+        # Notify all admins
+        admins = await db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}).to_list(100)
+        for admin in admins:
+            await create_notification(
+                user_id=admin["user_id"],
+                notif_type="mention",
+                title="Mention @admin",
+                message=f"{author['name']} vous a mentionné dans une discussion",
+                link=f"/topic/{topic_id}",
+                data={"alert_id": alert["alert_id"]}
+            )
     
     if re.search(modo_pattern, content, re.IGNORECASE):
         alert = {
@@ -641,10 +831,22 @@ async def process_mentions(content: str, topic_id: str, post_id: Optional[str], 
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.alerts.insert_one(alert)
+        
+        # Notify all modos and admins
+        staff = await db.users.find({"role": {"$in": ["modo", "admin"]}}, {"_id": 0, "user_id": 1}).to_list(100)
+        for member in staff:
+            await create_notification(
+                user_id=member["user_id"],
+                notif_type="mention",
+                title="Mention @modo",
+                message=f"{author['name']} demande l'aide d'un modérateur",
+                link=f"/topic/{topic_id}",
+                data={"alert_id": alert["alert_id"]}
+            )
 
 # ============ NOTIFICATION ROUTES ============
 @api_router.get("/notifications")
-async def get_notifications(user: dict = Depends(get_current_user), limit: int = 20):
+async def get_notifications(user: dict = Depends(get_current_user), limit: int = 50):
     notifs = await db.notifications.find(
         {"user_id": user["user_id"]}, {"_id": 0}
     ).sort("created_at", -1).limit(limit).to_list(limit)
@@ -664,6 +866,11 @@ async def mark_read(notification_id: str, user: dict = Depends(get_current_user)
     )
     return {"message": "Marked as read"}
 
+@api_router.delete("/notifications/{notification_id}")
+async def delete_notification(notification_id: str, user: dict = Depends(get_current_user)):
+    await db.notifications.delete_one({"notification_id": notification_id, "user_id": user["user_id"]})
+    return {"message": "Notification deleted"}
+
 # ============ REPORT ROUTES ============
 @api_router.post("/reports", response_model=ReportBase)
 async def create_report(data: ReportCreate, user: dict = Depends(get_current_user)):
@@ -674,25 +881,138 @@ async def create_report(data: ReportCreate, user: dict = Depends(get_current_use
         target_type=data.target_type,
         target_id=data.target_id,
         reason=data.reason,
+        details=data.details,
         created_at=datetime.now(timezone.utc).isoformat()
     )
     await db.reports.insert_one(report.model_dump())
+    
+    # Notify reporter
+    await create_notification(
+        user_id=user["user_id"],
+        notif_type="report_update",
+        title="Signalement envoyé",
+        message=f"Votre signalement a été envoyé et sera examiné par notre équipe.",
+        link="",
+        data={"report_id": report.report_id, "status": "pending"}
+    )
+    
+    # Notify all modos and admins
+    staff = await db.users.find({"role": {"$in": ["modo", "admin"]}}, {"_id": 0, "user_id": 1}).to_list(100)
+    for member in staff:
+        await create_notification(
+            user_id=member["user_id"],
+            notif_type="system",
+            title="Nouveau signalement",
+            message=f"{user['name']} a signalé un contenu ({data.target_type})",
+            link="/moderation",
+            data={"report_id": report.report_id}
+        )
+    
     return report
 
 @api_router.get("/reports")
-async def get_reports(status: str = "pending", user: dict = Depends(require_role(["admin", "modo"]))):
-    reports = await db.reports.find({"status": status}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return reports
+async def get_reports(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
+    user: dict = Depends(require_role(["admin", "modo"]))
+):
+    query = {}
+    if status:
+        query["status"] = status
+    if priority:
+        query["priority"] = priority
+    
+    skip = (page - 1) * limit
+    reports = await db.reports.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.reports.count_documents(query)
+    
+    return {"reports": reports, "total": total, "page": page, "pages": (total + limit - 1) // limit}
+
+@api_router.get("/reports/{report_id}")
+async def get_report(report_id: str, user: dict = Depends(require_role(["admin", "modo"]))):
+    report = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Get target content
+    target = None
+    if report["target_type"] == "post":
+        target = await db.posts.find_one({"post_id": report["target_id"]}, {"_id": 0})
+    elif report["target_type"] == "topic":
+        target = await db.topics.find_one({"topic_id": report["target_id"]}, {"_id": 0})
+    elif report["target_type"] == "user":
+        target = await db.users.find_one({"user_id": report["target_id"]}, {"_id": 0, "email": 0})
+    
+    return {"report": report, "target": target}
 
 @api_router.put("/reports/{report_id}")
-async def update_report(report_id: str, request: Request, user: dict = Depends(require_role(["admin", "modo"]))):
-    body = await request.json()
-    status = body.get("status", "reviewed")
-    await db.reports.update_one(
-        {"report_id": report_id},
-        {"$set": {"status": status, "reviewed_by": user["user_id"]}}
-    )
-    return {"message": "Report updated"}
+async def update_report(report_id: str, data: ReportUpdate, user: dict = Depends(require_role(["admin", "modo"]))):
+    report = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    old_status = report["status"]
+    
+    updates = {
+        "status": data.status,
+        "reviewed_by": user["user_id"],
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if data.resolution_note:
+        updates["resolution_note"] = data.resolution_note
+    if data.action_taken:
+        updates["action_taken"] = data.action_taken
+    if data.priority:
+        updates["priority"] = data.priority
+    
+    await db.reports.update_one({"report_id": report_id}, {"$set": updates})
+    
+    # Log action
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": user["user_id"],
+        "admin_name": user["name"],
+        "action": "update_report",
+        "target_type": "report",
+        "target_id": report_id,
+        "details": {"old_status": old_status, "new_status": data.status, "action_taken": data.action_taken},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Notify reporter of status change
+    status_messages = {
+        "in_review": "Votre signalement est en cours d'examen.",
+        "resolved": f"Votre signalement a été traité. {data.resolution_note or ''}",
+        "dismissed": f"Votre signalement a été classé. {data.resolution_note or ''}"
+    }
+    
+    if data.status in status_messages:
+        await create_notification(
+            user_id=report["reporter_id"],
+            notif_type="report_update",
+            title="Mise à jour de votre signalement",
+            message=status_messages[data.status],
+            link="",
+            data={"report_id": report_id, "status": data.status}
+        )
+    
+    updated = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/my-reports")
+async def get_my_reports(user: dict = Depends(get_current_user), page: int = 1, limit: int = 20):
+    """Get reports submitted by the current user"""
+    skip = (page - 1) * limit
+    reports = await db.reports.find(
+        {"reporter_id": user["user_id"]}, {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.reports.count_documents({"reporter_id": user["user_id"]})
+    
+    return {"reports": reports, "total": total, "page": page}
 
 # ============ ALERT ROUTES ============
 @api_router.get("/alerts")
@@ -708,7 +1028,11 @@ async def handle_alert(alert_id: str, request: Request, user: dict = Depends(req
     body = await request.json()
     await db.alerts.update_one(
         {"alert_id": alert_id},
-        {"$set": {"status": body.get("status", "handled"), "handled_by": user["user_id"]}}
+        {"$set": {
+            "status": body.get("status", "handled"),
+            "handled_by": user["user_id"],
+            "handled_at": datetime.now(timezone.utc).isoformat()
+        }}
     )
     return {"message": "Alert updated"}
 
@@ -719,71 +1043,138 @@ async def get_admin_stats(user: dict = Depends(require_role(["admin"]))):
     topics_count = await db.topics.count_documents({})
     posts_count = await db.posts.count_documents({})
     reports_pending = await db.reports.count_documents({"status": "pending"})
+    reports_in_review = await db.reports.count_documents({"status": "in_review"})
     alerts_pending = await db.alerts.count_documents({"status": "pending"})
+    banned_users = await db.users.count_documents({"is_banned": True})
     
     # Recent activity
-    recent_users = await db.users.find({}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+    recent_users = await db.users.find({}, {"_id": 0, "email": 0}).sort("created_at", -1).limit(5).to_list(5)
     recent_topics = await db.topics.find({}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+    recent_reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
     
     return {
         "users_count": users_count,
         "topics_count": topics_count,
         "posts_count": posts_count,
         "reports_pending": reports_pending,
+        "reports_in_review": reports_in_review,
         "alerts_pending": alerts_pending,
+        "banned_users": banned_users,
         "recent_users": recent_users,
-        "recent_topics": recent_topics
+        "recent_topics": recent_topics,
+        "recent_reports": recent_reports
     }
 
 @api_router.get("/admin/users")
-async def get_all_users(page: int = 1, limit: int = 20, user: dict = Depends(require_role(["admin"]))):
+async def get_all_users(
+    page: int = 1,
+    limit: int = 20,
+    role: Optional[str] = None,
+    banned: Optional[bool] = None,
+    search: Optional[str] = None,
+    user: dict = Depends(require_role(["admin"]))
+):
+    query = {}
+    if role:
+        query["role"] = role
+    if banned is not None:
+        query["is_banned"] = banned
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}}
+        ]
+    
     skip = (page - 1) * limit
-    users = await db.users.find({}, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
-    total = await db.users.count_documents({})
+    users = await db.users.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.users.count_documents(query)
     return {"users": users, "total": total, "page": page, "pages": (total + limit - 1) // limit}
 
 @api_router.put("/admin/users/{user_id}")
 async def admin_update_user(user_id: str, request: Request, admin: dict = Depends(require_role(["admin"]))):
     body = await request.json()
-    allowed = ["role", "is_banned"]
+    allowed = ["role", "is_banned", "ban_reason", "verification_badge"]
     updates = {k: v for k, v in body.items() if k in allowed}
     
     if updates:
         await db.users.update_one({"user_id": user_id}, {"$set": updates})
+        
         # Log action
-        log = {
+        await db.admin_logs.insert_one({
             "log_id": f"log_{uuid.uuid4().hex[:8]}",
             "admin_id": admin["user_id"],
+            "admin_name": admin["name"],
             "action": "update_user",
+            "target_type": "user",
             "target_id": user_id,
             "details": updates,
             "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.admin_logs.insert_one(log)
+        })
+        
+        # Notify user if banned
+        if updates.get("is_banned"):
+            await create_notification(
+                user_id=user_id,
+                notif_type="system",
+                title="Compte suspendu",
+                message=f"Votre compte a été suspendu. Raison: {updates.get('ban_reason', 'Non spécifiée')}",
+                link=""
+            )
+        # Notify user if unbanned
+        elif "is_banned" in updates and not updates["is_banned"]:
+            await create_notification(
+                user_id=user_id,
+                notif_type="system",
+                title="Compte réactivé",
+                message="Votre compte a été réactivé. Bienvenue de retour !",
+                link=""
+            )
     
     updated = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/admin/users/{user_id}")
 async def admin_delete_user(user_id: str, admin: dict = Depends(require_role(["admin"]))):
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     await db.users.delete_one({"user_id": user_id})
     await db.user_sessions.delete_many({"user_id": user_id})
+    
     # Log action
-    log = {
+    await db.admin_logs.insert_one({
         "log_id": f"log_{uuid.uuid4().hex[:8]}",
         "admin_id": admin["user_id"],
+        "admin_name": admin["name"],
         "action": "delete_user",
+        "target_type": "user",
         "target_id": user_id,
+        "details": {"name": user.get("name"), "email": user.get("email")},
         "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.admin_logs.insert_one(log)
+    })
+    
     return {"message": "User deleted"}
 
 @api_router.get("/admin/logs")
-async def get_admin_logs(page: int = 1, limit: int = 50, user: dict = Depends(require_role(["admin"]))):
+async def get_admin_logs(
+    page: int = 1,
+    limit: int = 50,
+    action: Optional[str] = None,
+    admin_id: Optional[str] = None,
+    user: dict = Depends(require_role(["admin"]))
+):
+    query = {}
+    if action:
+        query["action"] = action
+    if admin_id:
+        query["admin_id"] = admin_id
+    
     skip = (page - 1) * limit
-    logs = await db.admin_logs.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
-    return logs
+    logs = await db.admin_logs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.admin_logs.count_documents(query)
+    
+    return {"logs": logs, "total": total, "page": page}
 
 # ============ MODERATION ROUTES ============
 @api_router.post("/modo/warn/{user_id}")
@@ -791,30 +1182,68 @@ async def warn_user(user_id: str, request: Request, modo: dict = Depends(require
     body = await request.json()
     reason = body.get("reason", "Comportement inapproprié")
     
+    # Increment warning count
+    await db.users.update_one({"user_id": user_id}, {"$inc": {"warnings_count": 1}})
+    
     # Create warning notification
-    notif = {
-        "notification_id": f"notif_{uuid.uuid4().hex[:8]}",
-        "user_id": user_id,
-        "type": "warning",
-        "message": f"Avertissement: {reason}",
-        "link": "",
-        "is_read": False,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.notifications.insert_one(notif)
+    await create_notification(
+        user_id=user_id,
+        notif_type="warning",
+        title="Avertissement",
+        message=f"Vous avez reçu un avertissement: {reason}",
+        link="",
+        data={"reason": reason, "from": modo["name"]}
+    )
     
     # Log action
-    log = {
+    await db.admin_logs.insert_one({
         "log_id": f"log_{uuid.uuid4().hex[:8]}",
         "admin_id": modo["user_id"],
+        "admin_name": modo["name"],
         "action": "warn_user",
+        "target_type": "user",
         "target_id": user_id,
         "details": {"reason": reason},
         "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.admin_logs.insert_one(log)
+    })
     
     return {"message": "User warned"}
+
+@api_router.post("/modo/mute/{user_id}")
+async def mute_user(user_id: str, request: Request, modo: dict = Depends(require_role(["admin", "modo"]))):
+    """Temporarily mute a user (ban for X hours)"""
+    body = await request.json()
+    duration_hours = body.get("duration", 24)
+    reason = body.get("reason", "Mute temporaire")
+    
+    mute_until = (datetime.now(timezone.utc) + timedelta(hours=duration_hours)).isoformat()
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_banned": True, "ban_reason": f"Mute jusqu'à {mute_until}: {reason}"}}
+    )
+    
+    await create_notification(
+        user_id=user_id,
+        notif_type="warning",
+        title="Mute temporaire",
+        message=f"Vous êtes mute pour {duration_hours} heures. Raison: {reason}",
+        link="",
+        data={"duration": duration_hours, "reason": reason}
+    )
+    
+    await db.admin_logs.insert_one({
+        "log_id": f"log_{uuid.uuid4().hex[:8]}",
+        "admin_id": modo["user_id"],
+        "admin_name": modo["name"],
+        "action": "mute_user",
+        "target_type": "user",
+        "target_id": user_id,
+        "details": {"duration": duration_hours, "reason": reason},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"message": f"User muted for {duration_hours} hours"}
 
 # ============ FILE UPLOAD ============
 @api_router.post("/upload")
@@ -917,17 +1346,19 @@ async def startup():
     await db.categories.create_index("category_id", unique=True)
     await db.topics.create_index("topic_id", unique=True)
     await db.posts.create_index("post_id", unique=True)
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.reports.create_index([("status", 1), ("created_at", -1)])
     
     # Create default categories if none exist
     count = await db.categories.count_documents({})
     if count == 0:
         default_cats = [
-            {"category_id": "cat_general", "name": "Général", "description": "Discussions générales sur le streaming", "icon": "MessageSquare", "color": "#7C3AED", "order": 0, "created_at": datetime.now(timezone.utc).isoformat()},
-            {"category_id": "cat_tiktok", "name": "TikTok", "description": "Tout sur TikTok et les créateurs TikTok", "icon": "Video", "color": "#06B6D4", "order": 1, "created_at": datetime.now(timezone.utc).isoformat()},
-            {"category_id": "cat_twitch", "name": "Twitch", "description": "Discussions sur Twitch et les streamers", "icon": "Tv", "color": "#9333EA", "order": 2, "created_at": datetime.now(timezone.utc).isoformat()},
-            {"category_id": "cat_youtube", "name": "YouTube", "description": "YouTube Gaming et créateurs de contenu", "icon": "Youtube", "color": "#EF4444", "order": 3, "created_at": datetime.now(timezone.utc).isoformat()},
-            {"category_id": "cat_setup", "name": "Setup & Matos", "description": "Partagez vos setups et équipements", "icon": "Monitor", "color": "#10B981", "order": 4, "created_at": datetime.now(timezone.utc).isoformat()},
-            {"category_id": "cat_events", "name": "Events & IRL", "description": "Événements, meet-ups et rencontres", "icon": "Calendar", "color": "#F59E0B", "order": 5, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_general", "name": "Général", "description": "Discussions générales sur le streaming", "icon": "MessageSquare", "color": "#7C3AED", "order": 0, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_tiktok", "name": "TikTok", "description": "Tout sur TikTok et les créateurs TikTok", "icon": "Video", "color": "#06B6D4", "order": 1, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_twitch", "name": "Twitch", "description": "Discussions sur Twitch et les streamers", "icon": "Tv", "color": "#9333EA", "order": 2, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_youtube", "name": "YouTube", "description": "YouTube Gaming et créateurs de contenu", "icon": "Youtube", "color": "#EF4444", "order": 3, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_setup", "name": "Setup & Matos", "description": "Partagez vos setups et équipements", "icon": "Monitor", "color": "#10B981", "order": 4, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"category_id": "cat_events", "name": "Events & IRL", "description": "Événements, meet-ups et rencontres", "icon": "Calendar", "color": "#F59E0B", "order": 5, "is_visible": True, "created_at": datetime.now(timezone.utc).isoformat()},
         ]
         await db.categories.insert_many(default_cats)
         logger.info("Default categories created")

@@ -10,7 +10,7 @@
       "details": "Response received successfully",
       "expected_status": 200,
       "actual_status": 200,
-      "timestamp": "2026-03-25T10:42:54.633748"
+      "timestamp": "2026-03-25T11:18:38.399546"
     },
     {
       "test_name": "Get Categories",
@@ -18,7 +18,7 @@
       "details": "Response received successfully",
       "expected_status": 200,
       "actual_status": 200,
-      "timestamp": "2026-03-25T10:42:54.767045"
+      "timestamp": "2026-03-25T11:18:38.566612"
     },
     {
       "test_name": "Category 'G\u00e9n\u00e9ral' exists",
@@ -26,7 +26,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767659"
+      "timestamp": "2026-03-25T11:18:38.567213"
     },
     {
       "test_name": "Category 'TikTok' exists",
@@ -34,7 +34,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767674"
+      "timestamp": "2026-03-25T11:18:38.567228"
     },
     {
       "test_name": "Category 'Twitch' exists",
@@ -42,7 +42,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767679"
+      "timestamp": "2026-03-25T11:18:38.567232"
     },
     {
       "test_name": "Category 'YouTube' exists",
@@ -50,7 +50,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767682"
+      "timestamp": "2026-03-25T11:18:38.567236"
     },
     {
       "test_name": "Category 'Setup & Matos' exists",
@@ -58,7 +58,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767686"
+      "timestamp": "2026-03-25T11:18:38.567239"
     },
     {
       "test_name": "Category 'Events & IRL' exists",
@@ -66,7 +66,7 @@
       "details": "",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.767690"
+      "timestamp": "2026-03-25T11:18:38.567244"
     },
     {
       "test_name": "Get Public Stats",
@@ -74,31 +74,31 @@
       "details": "Response received successfully",
       "expected_status": 200,
       "actual_status": 200,
-      "timestamp": "2026-03-25T10:42:54.898414"
+      "timestamp": "2026-03-25T11:18:38.731829"
     },
     {
       "test_name": "Stats field 'users_count' present",
       "success": true,
-      "details": "Value: 0",
+      "details": "Value: 2",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.899061"
+      "timestamp": "2026-03-25T11:18:38.732519"
     },
     {
       "test_name": "Stats field 'topics_count' present",
       "success": true,
-      "details": "Value: 0",
+      "details": "Value: 1",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.899079"
+      "timestamp": "2026-03-25T11:18:38.732538"
     },
     {
       "test_name": "Stats field 'posts_count' present",
       "success": true,
-      "details": "Value: 0",
+      "details": "Value: 1",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:54.899084"
+      "timestamp": "2026-03-25T11:18:38.732543"
     },
     {
       "test_name": "Get Topics",
@@ -106,15 +106,15 @@
       "details": "Response received successfully",
       "expected_status": 200,
       "actual_status": 200,
-      "timestamp": "2026-03-25T10:42:55.039313"
+      "timestamp": "2026-03-25T11:18:38.855665"
     },
     {
       "test_name": "Topics response structure valid",
       "success": true,
-      "details": "Found 0 topics",
+      "details": "Found 1 topics",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:55.039954"
+      "timestamp": "2026-03-25T11:18:38.856283"
     },
     {
       "test_name": "Search API",
@@ -122,7 +122,7 @@
       "details": "Response received successfully",
       "expected_status": 200,
       "actual_status": 200,
-      "timestamp": "2026-03-25T10:42:55.165334"
+      "timestamp": "2026-03-25T11:18:38.990291"
     },
     {
       "test_name": "Auth Me (No Token)",
@@ -130,7 +130,7 @@
       "details": "Response received successfully",
       "expected_status": 401,
       "actual_status": 401,
-      "timestamp": "2026-03-25T10:42:55.262939"
+      "timestamp": "2026-03-25T11:18:39.096486"
     },
     {
       "test_name": "Notifications (No Token)",
@@ -138,7 +138,7 @@
       "details": "Response received successfully",
       "expected_status": 401,
       "actual_status": 401,
-      "timestamp": "2026-03-25T10:42:55.352961"
+      "timestamp": "2026-03-25T11:18:39.189934"
     },
     {
       "test_name": "CORS Headers Present",
@@ -146,7 +146,7 @@
       "details": "Origin: *",
       "expected_status": null,
       "actual_status": null,
-      "timestamp": "2026-03-25T10:42:55.417475"
+      "timestamp": "2026-03-25T11:18:39.259699"
     }
   ]
 }

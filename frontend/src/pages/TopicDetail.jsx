@@ -17,7 +17,7 @@ import {
 } from '../components/ui/dialog';
 import { useAuthStore } from '../store/authStore';
 import { useForumStore } from '../store/forumStore';
-import { RoleBadge } from '../components/Layout';
+import { RoleBadge, VerificationBadge } from '../components/Layout';
 import { toast } from 'sonner';
 
 const formatDate = (dateStr) => {
@@ -76,6 +76,7 @@ const PostCard = ({ post, isAuthor, onReply, onLike, onReport }) => {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">{post.author_name}</span>
+              <VerificationBadge badge={post.author_badge} />
               <RoleBadge role={post.author_role} />
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -301,6 +302,7 @@ export default function TopicDetail() {
                     <AvatarFallback>{currentTopic.author_name?.[0]}</AvatarFallback>
                   </Avatar>
                   <span>{currentTopic.author_name}</span>
+                  <VerificationBadge badge={currentTopic.author_badge} />
                   <RoleBadge role={currentTopic.author_role} />
                 </Link>
                 <span className="flex items-center gap-1">
